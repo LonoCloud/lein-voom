@@ -1,8 +1,5 @@
 (ns leiningen.git-version
-  [:use [clojure.pprint]]
-  (:require [clj-jgit.querying :as gitq]
-            [clj-jgit.porcelain :as git]
-            [clojure.java.shell :refer [sh]]
+  (:require [clojure.java.shell :refer [sh]]
             [clojure.string :as s]
             [leiningen.core.main :as lmain])
   (:import [java.util Date]))
@@ -32,7 +29,6 @@
   [project & args]
   (let [[kstrs sargs] (split-with #(.startsWith % ":") args)
         kargs (map #(keyword (.substring % 1)) kstrs)
-        gcommit (git/load-repo ".")
         gver (-> project :root get-git-version)
         qual (format-git-ver gver timestamp-fmt)
         upfn #(s/replace % #"-SNAPSHOT" qual)
