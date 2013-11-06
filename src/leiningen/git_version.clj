@@ -38,6 +38,19 @@
       {:ctime ctime :sha sha})))
 
 (defn git-version
+  "Usage:
+    lein git-version [flags] [lein command ...]
+      Runs lein command with a project version augmented with git
+      version of the most recent change of this project directory.
+      Flags include:
+        :insanely-allow-dirty-working-copy - by default git-version
+          refuses to handle a dirty working copy
+        :no-upstream - by default git-version wants to see the current
+          version reachable via an upstream repo
+        :long-sha - uses a full length sha instead of the default
+          short form
+    lein git-version [:long-sha] :print
+    lein git-version :parse <version-str>"
   [project & args]
   (let [[kstrs sargs] (split-with #(.startsWith % ":") args)
         kargs (map #(keyword (.substring % 1)) kstrs)
