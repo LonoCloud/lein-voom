@@ -28,12 +28,13 @@
     (str "-" (formatted-timestamp fmt ctime) "-" sha)))
 
 (defn ver-parse
-  "Parses jar-path-like-string or versioned-artifact-string to find ctime and sha.
+  "Parses jar-path-like-string or artifact-version-string to find ctime and sha.
    Can handle cases in the range of:
+     1.2.3-20120219223112-abc123f
      foo-1.2.3-20120219223112-abc123f
      /path/to/foo-1.2.3-20120219223112-abc123f19ea8d29b13.jar"
   [ver-str]
-  (let [[_ ctime sha] (re-matches #".*-([0-9]{14})-([a-f0-9]{5,40})(?:\.jar)?$" ver-str)]
+  (let [[_ ctime sha] (re-matches #".*-?([0-9]{14})-([a-f0-9]{5,40})(?:\.jar)?$" ver-str)]
     (when (and ctime sha)
       {:ctime ctime :sha sha})))
 
