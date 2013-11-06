@@ -73,11 +73,11 @@ our project like so:
 This would cause the installed artifact to have a version looking
 something like:
 
-    1.2.3-20120219223112-abc123f
-    ^-+-^ ^-----+------^ ^--+--^
-      |         |           \----- git sha
-      |         \----------------- year/month/day/hour/minute/second of commit
-      \--------------------------- original semantic version from project.clj
+    1.2.3-20120219_223112-g123abcf
+    ^-+-^ ^------+------^  ^--+--^
+      |          |            \----- git sha
+      |          \------------------ year/month/day/hour/minute/second of commit
+      \----------------------------- original semantic version from project.clj
 
 This version string includes the original semantic version for
 meaningful human consumption. The timestamp is included for a similar
