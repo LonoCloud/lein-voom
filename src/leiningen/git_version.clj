@@ -37,6 +37,12 @@
     (when (and ctime sha)
       {:ctime ctime :sha sha})))
 
+(defn dirty-wc?
+  [path]
+  ;; TODO Is it right to ignore untracked files?
+  (let [{:keys [out err exit]} (sh "git" "status" "--short" "--untracked-files=no" path)]
+    (not (empty? out))))
+
 (defn git-version
   "Usage:
     lein git-version [flags] [lein command ...]
@@ -53,18 +59,19 @@
     lein git-version :parse <version-str>"
   [project & args]
   (let [[kstrs sargs] (split-with #(.startsWith % ":") args)
-        kargs (map #(keyword (.substring % 1)) kstrs)
-        long-sha (some #{:long-sha} kargs)
+        kargset (set (map #(keyword (.substring % 1)) kstrs))
+        long-sha (kargset :long-sha)
         gver (-> project :root (get-git-version long-sha))
         qual (format-git-ver gver timestamp-fmt)
         upfn #(str (s/replace % #"-SNAPSHOT" "") qual)
         nproj (update-in project [:version] upfn)
         nmeta (update-in (meta project) [:without-profiles :version] upfn)
         nnproj (with-meta nproj nmeta)]
-    ;; TODO throw exception if dirty
-    ;; TODO throw exception if upstream doesn't contain this commit
-    ;; args :insanely-allow-dirty-working-copy :no-upstream :print :long-sha
+    ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
     (cond
-     (some #{:print} kargs) (println (upfn (:version project)))
-     (some #{:parse} kargs) (prn (ver-parse (first sargs)))
-     :else (lmain/resolve-and-apply nnproj sargs))))
+     (:print kargset) (println (upfn (:version project)))
+     (:parse kargset) (prn (ver-parse (first sargs)))
+     :else (if (and (dirty-wc? (:root project))
+                    (not (:insanely-allow-dirty-working-copy kargset)))
+             (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
+             (lmain/resolve-and-apply nnproj sargs)))))
