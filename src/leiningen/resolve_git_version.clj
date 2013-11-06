@@ -2,7 +2,8 @@
   (:require [cemerick.pomegranate.aether :as aether]
             [clojure.pprint :refer [pprint]]
             [leiningen.git-version :as gv])
-  (:import (org.sonatype.aether.transfer ArtifactNotFoundException)))
+  (:import (org.sonatype.aether.transfer ArtifactNotFoundException)
+           (java.util.logging Logger Handler Level)))
 
 (set! *warn-on-reflection* true)
 
@@ -28,9 +29,25 @@
       (throw (ex-info "TODO" {:ctime ctime :sha sha} old-exception)))
     (throw (ex-info (str "Not parseable as git-version: " version) {:artifact art} old-exception))))
 
+(defn with-log-level [level f]
+  (let [handlers (doall (.getHandlers (Logger/getLogger "")))
+        old-levels (doall (map #(.getLevel ^Handler %) handlers))
+        _ (doseq [h handlers] (.setLevel ^Handler h level))
+        result (f)]
+    (dorun (map #(.setLevel ^Handler %1 %2) handlers old-levels))
+    result))
+
+(def null-writer
+  (proxy [java.io.Writer] []
+    (write ([_]) ([_ _ _]))
+    (flush [])
+    (close [])))
+
 (defn try-once-resolve-git-version [project]
   (try
-    (leiningen.core.classpath/resolve-dependencies :dependencies project)
+    (with-log-level Level/OFF
+      #(binding [*err* null-writer]
+         (leiningen.core.classpath/resolve-dependencies :dependencies project)))
     :ok
     (catch Exception e
       ;; lein resolve-dependencies wraps a
@@ -45,6 +62,10 @@
   "Resolves project dependencies like 'lein deps', but also uses TOOL_REPOS_DIR"
   [project & args]
 
-  (loop []
-    (when-not (= :ok (try-once-resolve-git-version project))
-      (recur))))
+  (try
+    (loop []
+      (when-not (= :ok (try-once-resolve-git-version project))
+        (recur)))
+    (catch clojure.lang.ExceptionInfo e
+      (println "Failed to resolve dependency:" (.getMessage e))
+      (pprint {:exception-data (ex-data e)}))))
