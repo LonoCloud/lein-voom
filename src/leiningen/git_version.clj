@@ -39,8 +39,7 @@
 
 (defn dirty-wc?
   [path]
-  ;; TODO Is it right to ignore untracked files?
-  (let [{:keys [out err exit]} (sh "git" "status" "--short" "--untracked-files=no" path)]
+  (let [{:keys [out err exit]} (sh "git" "status" "--short" path)]
     (not (empty? out))))
 
 (defn git-version
