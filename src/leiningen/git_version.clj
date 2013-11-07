@@ -62,7 +62,7 @@
     lein git-version :parse <version-str>"
   [project & args]
   (let [[kstrs sargs] (split-with #(.startsWith % ":") args)
-        kargset (set (map #(keyword (.substring % 1)) kstrs))
+        kargset (set (map #(keyword (subs % 1)) kstrs))
         long-sha (kargset :long-sha)
         gver (-> project :root (get-git-version long-sha))
         qual (format-git-ver gver timestamp-fmt)
