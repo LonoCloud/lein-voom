@@ -4,7 +4,7 @@
             [leiningen.core.main :as lmain])
   (:import [java.util Date]))
 
-(def timestamp-fmt "yyyyMMddhhmmss")
+(def timestamp-fmt "yyyyMMdd_hhmmss")
 
 (defn formatted-timestamp
   [fmt t]
@@ -25,16 +25,19 @@
 (defn format-git-ver
   [gver fmt]
   (let [{:keys [ctime sha]} gver]
-    (str "-" (formatted-timestamp fmt ctime) "-" sha)))
+    (str "-" (formatted-timestamp fmt ctime) "-g" sha)))
 
 (defn ver-parse
   "Parses jar-path-like-string or artifact-version-string to find ctime and sha.
    Can handle cases in the range of:
      1.2.3-20120219223112-abc123f
-     foo-1.2.3-20120219223112-abc123f
-     /path/to/foo-1.2.3-20120219223112-abc123f19ea8d29b13.jar"
+     1.2.3-20120219_223112-gabc123f
+     foo-1.2.3-20120219223112-gabc123f
+     foo-1.2.3-20120219_223112-abc123f
+     /path/to/foo-1.2.3-20120219_223112-gabc123f19ea8d29b13.jar"
   [ver-str]
-  (let [[_ ctime sha] (re-matches #".*-?([0-9]{14})-([a-f0-9]{5,40})(?:\.jar)?$" ver-str)]
+  (let [[_ ctime sha] (re-matches #".*-?([0-9]{8}_?[0-9]{6})-g?([a-f0-9]{4,40})(?:\.jar)?$" ver-str)
+        ctime (s/replace ctime #"_" "")]
     (when (and ctime sha)
       {:ctime ctime :sha sha})))
 
