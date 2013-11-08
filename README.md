@@ -28,7 +28,7 @@ To update your `project.clj` to use the latest versions of your dependencies:
 ## The scenario:
 
 Multiple git projects with one or more leiningen projects in each, all
-under active development by a more-or-less tightly coordinated team.
+under active development by a team.
 
 ## Use cases:
 
@@ -43,15 +43,15 @@ under active development by a more-or-less tightly coordinated team.
 
 ## A solution:
 
-Most approaches can be grouped into two categories: ones that use
-SNAPSHOT artifacts and ones that don't. SNAPSHOT versions can make
-some sense if all related deps are kept in a single git repo, and care
-is taken to rebuild from sources whenever they change, though tracking
-from a built artifact back to a git commit can still be problematic.
-Multiple git repos add more problems, some of which can be addressed
-by git submodules. Yet without putting git commit sha's in artifact
-version numbers, interoperating with the larger world of leiningen
-dependencies is problematic.
+Most approaches addressing these use cases can be grouped into two
+categories: ones that use SNAPSHOT artifacts and ones that don't.
+SNAPSHOT versions can make some sense if all related deps are kept in
+a single git repo, and care is taken to rebuild from sources whenever
+they change, though tracking from a built artifact back to a git
+commit can still be problematic. Multiple git repos add more problems,
+some of which can be addressed by git submodules. Yet, without putting
+git commit sha's in artifact version numbers, interoperating with the
+larger world of leiningen dependencies is problematic.
 
 Our solution falls into the second category -- using only non-SNAPSHOT
 versions for built artifacts and dependency declarations. The most
@@ -82,7 +82,7 @@ something like:
 This version string includes the original semantic version for
 meaningful human consumption. The timestamp is included for a similar
 reason, as well as to maintain good sorting order. The git sha is the
-piece we need to track back to a specific commit and therefore the
+piece we need to track back to a specific commit and, therefore, the
 source code used to build it. Note that `git-version` will refuse to
 operate unless the working copy is clean, to maintain the integrity of
 the git sha.
@@ -100,8 +100,8 @@ specific-version dependencies instead of imprecise SNAPSHOT deps.
 But now when you pull a git version of a project, it may depend on
 very specific but unreleased versions of its dependencies. One
 solution is to have a continuous integration service set up to
-generate and make available via a maven repo a jar for every commit of
-every project. Such a continuous integration service has other
+generate, and make available via a maven repo, a jar for every commit
+of every project. Such a continuous integration service has other
 benefits as well (see "auto-freshen-deps" below), but relying
 completely on such a service is not always practical, so another
 solution is provided via `resolve-git-versions`
@@ -125,9 +125,9 @@ It does this by maintaining a directory full of git repos that are
 meant to be used only by this plugin. By default these repos are kept
 in `.git-version-repos` in the user's home directory. When an artifact
 with a git-version needs to be built, the sha is found from among the
-git-version-repos (fetching the from upstream git servers if
+git-version-repos (fetching from the upstream git servers if
 necessary), and that sha is checked out. The plugin then scans the
-`project.clj` files in that git repos to find the one that builds the
+`project.clj` files in that git repo to find the one that builds the
 needed dependency, and then runs "lein git-version install". Now with
 that dependency resolved, normal lein dep resolution is attempted
 again, repeating as necessary until all dependencies are resolved.
@@ -143,7 +143,7 @@ manually clone the required git repo themselves.
 [Not yet implemented]
 
 One use case not yet addressed is when you are ready to use newer
-version of your dependencies. You can of course do this manually by
+versions of your dependencies. You can, of course, do this manually by
 checking your git repos and constructing the appropriate git-version
 string by hand, and editing your `project.clj` appropriately. This may
 even be the best approach when using official release versions of
