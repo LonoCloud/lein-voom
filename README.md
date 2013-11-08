@@ -192,7 +192,5 @@ new version that other projects can reliably depend upon.
 
 ## License
 
-Copyright © 2013 LonoCloud and ViaSat
-
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
