@@ -1,7 +1,8 @@
 # lein-voom
 
-A Leiningen plugin to build and use artifacts with particularly
-formatted version strings.
+![voom](docs/dr-seuss-voom.jpg)
+
+lein-voom is a Leiningen plugin that helps you clean up your dependency tree.
 
 ## Usage [TL;DR]
 
