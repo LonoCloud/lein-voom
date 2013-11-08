@@ -4,7 +4,8 @@
             [clojure.pprint :refer [pprint]]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
-            [org.satta.glob :refer [glob]])
+            [org.satta.glob :refer [glob]]
+            [robert.hooke :as hooke])
   (:import [java.util Date]
            [java.io File]
            [java.util.logging Logger Handler Level]
