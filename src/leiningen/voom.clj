@@ -1,4 +1,4 @@
-(ns leiningen.git-version
+(ns leiningen.voom
   (:require [clojure.java.shell :refer [sh]]
             [clojure.string :as s]
             [clojure.pprint :refer [pprint]]
@@ -22,7 +22,7 @@
              (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT")))
            t))
 
-(defn get-git-version
+(defn get-voom-version
   [path & [long-sha]]
   (let [shafmt (if long-sha "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
@@ -32,7 +32,7 @@
         ctime (Date. ^String datestr)]
     {:ctime ctime :sha sha}))
 
-(defn format-git-ver
+(defn format-voom-ver
   [gver fmt]
   (let [{:keys [ctime sha]} gver]
     (str "-" (formatted-timestamp fmt ctime) "-g" sha)))
@@ -132,7 +132,7 @@
 
 (defn install-versioned-artifact
   [proot]
-  (let [r (sh "lein" "git-version" "install" :dir proot)]
+  (let [r (sh "lein" "voom" "install" :dir proot)]
     (prn "r" r)))
 
 (defn missing-artifacts-from-exception
@@ -167,7 +167,7 @@
           (println "->" (:root prj))))
       (doseq [prj prjs]
         (install-versioned-artifact (:root prj))))
-    (throw (ex-info (str "Not parseable as git-version: " version) {:artifact art} old-exception))))
+    (throw (ex-info (str "Not parseable as voom-version: " version) {:artifact art} old-exception))))
 
 (def null-writer
   "Like /dev/null, but for Java!"
@@ -216,26 +216,26 @@
    "task-add" nope
    "new-task" nope})
 
-(defn git-version
+(defn voom
   "Usage:
-    lein git-version [flags] [lein command ...]
+    lein voom [flags] [lein command ...]
       Runs lein command with a project version augmented with git
       version of the most recent change of this project directory.
       Flags include:
-        :insanely-allow-dirty-working-copy - by default git-version
+        :insanely-allow-dirty-working-copy - by default voom
           refuses to handle a dirty working copy
-        :no-upstream - by default git-version wants to see the current
+        :no-upstream - by default voom wants to see the current
           version reachable via an upstream repo
         :long-sha - uses a full length sha instead of the default
           short form
-    lein git-version [:long-sha] :print
-    lein git-version :parse <version-str>"
+    lein voom [:long-sha] :print
+    lein voom :parse <version-str>"
   [project & args]
   (let [[kstrs sargs] (split-with #(.startsWith ^String % ":") args)
         kargset (set (map #(keyword (subs % 1)) kstrs))
         long-sha (kargset :long-sha)
-        gver (-> project :root (get-git-version long-sha))
-        qual (format-git-ver gver timestamp-fmt)
+        gver (-> project :root (get-voom-version long-sha))
+        qual (format-voom-ver gver timestamp-fmt)
         upfn #(str (s/replace % #"-SNAPSHOT" "") qual)
         nproj (update-in project [:version] upfn)
         nmeta (update-in (meta project) [:without-profiles :version] upfn)
