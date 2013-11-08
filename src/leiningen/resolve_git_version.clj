@@ -11,11 +11,9 @@
 
 (set! *warn-on-reflection* true)
 
-(def name-in-transition "ova")
-
 (def repos-home (or (System/getenv "REPOS_HOME")
                     (str (System/getProperty "user.home")
-                         (str "/." name-in-transition "-repos"))))
+                         (str "/.voom-repos"))))
 
 (defn with-log-level [level f]
   (let [handlers (doall (.getHandlers (Logger/getLogger "")))
@@ -128,7 +126,7 @@
     (flush [])
     (close [])))
 
-(defn try-once-resolve-ova-version [project]
+(defn try-once-resolve-voom-version [project]
   (try
     (with-log-level Level/OFF
       #(binding [*err* null-writer]
@@ -143,12 +141,12 @@
           (resolve-artifact e art))
         (throw e)))))
 
-(defn resolve-ova-version
+(defn resolve-voom-version
   "Resolves project dependencies like 'lein deps', but also uses TOOL_REPOS_DIR"
   [project & args]
   (try
     (loop []
-      (when-not (= :ok (try-once-resolve-ova-version project))
+      (when-not (= :ok (try-once-resolve-voom-version project))
         (recur)))
     (catch clojure.lang.ExceptionInfo e
       (println "Failed to resolve dependency:" (.getMessage e))
