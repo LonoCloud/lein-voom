@@ -1,6 +1,6 @@
 # lein-voom
 
-![voom](docs/dr-seuss-voom.jpg)
+![voom](docs/dr-seuss-voom.png)
 
 lein-voom is a Leiningen plugin that helps you clean up your dependency tree.
 
