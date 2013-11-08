@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -e
+
+dir="$PWD"
+
+while [ "${dir}" ]; do
+    if [ -d "${dir}/.git" ]; then
+        break
+    elif [ -L "${dir}" ]; then
+        cd $(readlink -f "$PWD")
+        break
+    fi
+    dir=$(dirname "${dir}")
+done
+
+exec git "$@"
