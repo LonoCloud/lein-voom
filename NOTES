@@ -1,0 +1,19 @@
+check backups
+
+Tasks
+-----
+- add projects (optional git repo arg, optional project arg)                                                          tasker add warg
+  - add external repos, lono repos                                                                                    tasker add github.com:/clojure/core.async
+  - common git repo aliases                                                                                           tasker add core.typed
+- update lein-checkouts to deps (transitive) (automatically by lots of commands) (or a lein hook to make checkouts always look right)
+
+- task-wide git-reset: deps version walk tree from parent down deps / head sync all (likely to complain on dirty)     tasker reset HEAD; tasker reset deps
+- interactive child-to-parent dep walker: show dep order dirty / versions / dep skew                                  tasker walk ...or something
+
+Other tools:
+------------
+- git wrapper for working inside symlink sub-trees                 nuggit
+- lein plugin for git sha versioning this command (like install)   lein voom install; lein voom jar; etc.
+- freshen this project.clj with latest git-sha version deps        lein voom freshen (?)
+
+For now -- put all these in a single lein plugin? lein voom task-add, etc? ...except nuggit since it's bash and task tool.
