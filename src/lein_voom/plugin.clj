@@ -10,14 +10,21 @@
   "Checkout dependencies are used to place source for a dependency
   project directly on the classpath rather than having to install the
   dependency and restart the dependent project."
-  [project & args]
-  (prn "Calling hook" args)
-  [])
+  [_ project]
+  ;; TODO: Optimize classpath searches by filtering for only currenly
+  ;; existing directories?
+  (for [[d & _] (keys (lcp/get-dependencies :dependencies project))]
+       (str (:root project) "/../" (name d))))
 
 
 (defn hooks []
-  (prn "Activating voom hook")
   (hooke/add-hook #'lcp/checkout-deps-paths
                   #'checkout-deps-paths))
 
-(prn "loading hooks namespace")
+(comment
+  ;; Note for future travelers:
+  (prn "deps0" (:dependencies project)) ; top level deps
+  (prn "deps1" (lcp/get-dependencies :dependencies project)) ; transitive deps, flat
+  (prn "deps2" (lcp/dependency-hierarchy :dependencies project)) ; transitive deps, nested
+  (prn "deps3" (lcp/resolve-dependencies :dependencies project)) ; transitive deps, jars
+  )
