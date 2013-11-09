@@ -23,8 +23,8 @@
            t))
 
 (defn get-voom-version
-  [path & [long-sha]]
-  (let [shafmt (if long-sha "%H" "%h")
+  [path & [long-sha?]]
+  (let [shafmt (if long-sha? "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
         {:keys [out exit err]} (sh "git" "log" "-1" fmt path)
         ;; Throw exception if error?
@@ -203,6 +203,57 @@
       (pprint {:exception-data (ex-data e)}))))
 
 
+;; === freshen ===
+
+(defn fresh-version [[prj ver :as dep]]
+  (find-matching-projects repos-home)
+  (if (= prj 'clj-glob/clj-glob)
+    (assoc dep 1 "9.9.9")
+    dep))
+
+(defn rewrite-project-file [input-str replacement-map]
+  (reduce (fn [^String text [[prj old-ver :as old-dep] [_ new-ver]]]
+            (let [short-prj (if (= (name prj) (namespace prj))
+                              (name prj)
+                              (str prj))
+                  pattern (re-pattern (str "\\Q" short-prj "" "\\E(\\s+)\\Q\"" old-ver "\"\\E"))
+                  matches (re-seq pattern input-str)]
+              (when (empty? matches)
+                (throw (ex-info (str "No match found for " [prj old-ver])
+                                {:pattern pattern :dep old-dep})))
+              (when (second matches)
+                (throw (ex-info (str "More than one match found for " [prj old-ver])
+                                {:pattern pattern :dep old-dep})))
+              (s/replace text pattern (str short-prj "$1" \" new-ver \"))))
+          input-str
+          replacement-map))
+
+(defn freshen [project & args]
+  (let [prj-file-name (str (:root project) "/project.clj")
+        old-deps (:dependencies project)
+        desired-new-deps (map fresh-version old-deps)]
+    (if (= old-deps desired-new-deps)
+      (println "All deps already up-to-date.")
+      (let [replacement-map (into {} (map #(when (not= %1 %2) [%1 %2])
+                                          old-deps desired-new-deps))
+            tmp-file (File/createTempFile
+                      ".project-" ".clj" (File. ^String (:root project)))]
+
+        (spit tmp-file
+              (rewrite-project-file (slurp prj-file-name) replacement-map))
+
+        (if (= desired-new-deps (:dependencies (project/read (str tmp-file))))
+          (do
+            (doseq [[[prj old-ver] [_ new-ver]] replacement-map]
+              (println prj old-ver "->" new-ver))
+            (.renameTo tmp-file (File. prj-file-name)))
+          (throw (ex-info (str "Freshen mis-fire. See "
+                               tmp-file " for attempted change.")
+                          {:old-deps old-deps
+                           :replacement-map replacement-map
+                           :desired-new-deps desired-new-deps
+                           :tmp-file-name (str tmp-file)})))))))
+
 ;; === lein entrypoint ===
 
 (defn nope [& args]
@@ -212,7 +263,7 @@
 ;; lein commands?  Separate lein plugins?
 (def sub-commands
   {"build-deps" build-deps
-   "freshen" nope
+   "freshen" freshen
    "task-add" nope
    "new-task" nope})
 
