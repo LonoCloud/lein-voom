@@ -1,6 +1,8 @@
 (ns lein-voom.plugin
   (:require [leiningen.core.classpath :as lcp]
-            [robert.hooke :as hooke]))
+            [leiningen.voom :as voom]
+            [robert.hooke :as hooke])
+  (:import [java.io File]))
 
 (set! *warn-on-reflection* true)
 
@@ -10,11 +12,14 @@
   "Checkout dependencies are used to place source for a dependency
   project directly on the classpath rather than having to install the
   dependency and restart the dependent project."
-  [_ project]
-  ;; TODO: Optimize classpath searches by filtering for only currenly
-  ;; existing directories?
-  (for [[d & _] (keys (lcp/get-dependencies :dependencies project))]
-       (str (:root project) "/../" (name d))))
+  [orig-fn project]
+  (let [f  (-> (:root project) (str "/.." voom/task-dir) File.)]
+    (if (.isDirectory f)
+      (for [[d & _] (keys (lcp/get-dependencies :dependencies project))
+            :let [dep-path (str (:root project) "/../" (name d))]
+            :when (-> dep-path File. .isDirectory)]
+        dep-path)
+      (orig-fn project))))
 
 
 (defn hooks []
