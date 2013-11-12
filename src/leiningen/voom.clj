@@ -147,8 +147,12 @@
 
 (defn install-versioned-artifact
   [proot]
-  (let [r (sh "lein" "voom" "install" :dir proot)]
-    (prn "r" r)))
+  (let [install-cmd ["lein" "voom" "install" :dir proot]
+        _ (apply println "install-versioned-artifact:" install-cmd)
+        rtn (sh "lein" "voom" "install" :dir proot)]
+    (when-not (zero? (:exit rtn))
+      (throw (ex-info "lein voom install error" (assoc rtn :cmd install-cmd))))
+    rtn))
 
 (defn missing-artifacts-from-exception
   "Returns a sequence of artifacts indicated as missing anywhere in
