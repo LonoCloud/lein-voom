@@ -13,6 +13,16 @@
 
 (set! *warn-on-reflection* true)
 
+(defn git
+  [^File d & subcmd]
+  ;; We won't handle bare repos or displaced worktrees
+  (let [gitdir (.getPath d)
+        worktree (.getParent d)
+        rtn (apply sh "git" (str "--git-dir=" gitdir) (str "--work-tree=" worktree) subcmd)]
+    (when-not (zero? (:exit rtn))
+      (throw (ex-info "git error" rtn)))
+    rtn))
+
 ;; === git sha-based versions ===
 
 (def timestamp-fmt "yyyyMMdd_hhmmss")
@@ -24,10 +34,18 @@
            t))
 
 (defn get-voom-version
-  [path & [long-sha]]
-  (let [shafmt (if long-sha "%H" "%h")
+  [path & [long-sha?]]
+  (let [shafmt (if long-sha? "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
         {:keys [out exit err]} (sh "git" "log" "-1" fmt path)
+        ;; Throw exception if error?
+        [sha, datestr] (-> out s/trim (s/split #"," 2))
+        ctime (Date. ^String datestr)]
+    {:ctime ctime :sha sha}))
+
+(defn get-dir-voom-version
+  [dir path]
+  (let [{:keys [out exit err]} (git dir "log" "-1"  "--pretty=%h,%cd" "--" path)
         ;; Throw exception if error?
         [sha, datestr] (-> out s/trim (s/split #"," 2))
         ctime (Date. ^String datestr)]
@@ -73,13 +91,6 @@
     (dorun (map #(.setLevel ^Handler %1 %2) handlers old-levels))
     result))
 
-(defn git
-  [^File d & subcmd]
-  ;; We won't handle bare repos or displaced worktrees
-  (let [gitdir (.getPath d)
-        worktree (.getParent d)]
-    (apply sh "git" (str "--git-dir=" gitdir) (str "--work-tree=" worktree) subcmd)))
-
 (defn find-project-files
   [^File d]
   (let [{:keys [out err exit]} (git d "ls-files" "project.clj" "**/project.clj")
@@ -99,6 +110,9 @@
   (seq (for [d dirs
              :when (contains-sha? d sha)]
          d)))
+
+(defn all-repos-dirs []
+  (glob (str (s/replace repos-home #"/$" "") "/*/.git")))
 
 (defn fetch-all
   [dirs]
@@ -120,9 +134,7 @@
   [repos-dir pspec]
   (prn "find-matching-projects" repos-dir pspec)
   (let [{:keys [sha artifactId groupId]} pspec
-        dirglob (str (s/replace repos-dir #"/$" "") "/*/.git")
-        dirs (glob dirglob)
-        _ (prn "dirs" dirglob dirs)
+        dirs (all-repos-dirs)
         sha-candidates (locate-sha dirs sha)
         sha-candidates (or sha-candidates
                            (do (fetch-all dirs)
@@ -206,6 +218,84 @@
       (pprint {:exception-data (ex-data e)}))))
 
 
+;; === freshen ===
+
+(defn fetch-checkout-all
+  "This is slower than necessary for most real use cases."
+  [dirs]
+  (doseq [^File d dirs]
+    (println "Checking out latest:" (.getPath d))
+    (git d "fetch")
+    (git d "checkout" "origin/HEAD")))
+
+;; Add metadata pinning (how big to bump? all? minor? sha?) -- warn about not updating
+;; Opt-in autobump  -- default to no major auto
+(defn get-fresh-versions []
+  (let [dirs (all-repos-dirs)
+        _ (fetch-checkout-all dirs)]
+    (into {}
+          (for [dir dirs
+                prj-file (find-project-files dir)]
+            (let [{:keys [group name version] :as prj} (project/read prj-file)
+                  gver (get-dir-voom-version dir (:root prj))
+                  qual (format-voom-ver gver timestamp-fmt)
+                  new-ver (str (s/replace version #"-SNAPSHOT" "") qual)]
+              [(symbol group name) new-ver])))))
+
+(defn fresh-version [fresh-versions-map [prj ver :as dep]]
+  (if-let [new-ver (get fresh-versions-map prj)]
+    (assoc dep 1 new-ver)
+    (do
+      (when (ver-parse ver)
+        (println "Warning: didn't find or freshen voom-version dep" dep))
+      dep)))
+
+(defn rewrite-project-file [input-str replacement-map]
+  (reduce (fn [^String text [[prj old-ver :as old-dep] [_ new-ver]]]
+            (let [short-prj (if (= (name prj) (namespace prj))
+                              (name prj)
+                              (str prj))
+                  pattern (re-pattern (str "\\Q" short-prj "" "\\E(\\s+)\\Q\"" old-ver "\"\\E"))
+                  matches (re-seq pattern input-str)]
+              (when (empty? matches)
+                (throw (ex-info (str "No match found for " [prj old-ver])
+                                {:pattern pattern :dep old-dep})))
+              (when (second matches)
+                (throw (ex-info (str "More than one match found for " [prj old-ver])
+                                {:pattern pattern :dep old-dep})))
+              (s/replace text pattern (str short-prj "$1" \" new-ver \"))))
+          input-str
+          replacement-map))
+
+(defn freshen [project & args]
+  (let [prj-file-name (str (:root project) "/project.clj")
+        old-deps (:dependencies project)
+        fresh-versions-map (get-fresh-versions)
+        desired-new-deps (map #(fresh-version fresh-versions-map %) old-deps)]
+    (doseq [[[prj old-ver] [_ new-ver]] (map list old-deps desired-new-deps)]
+      (println (format "%-40s" prj)
+               (str old-ver
+                    (when (not= old-ver new-ver)
+                      (str " -> " new-ver)))))
+    (if (= old-deps desired-new-deps)
+      (println "All deps already up-to-date.")
+      (let [replacement-map (into {} (map #(when (not= %1 %2) [%1 %2])
+                                          old-deps desired-new-deps))
+            tmp-file (File/createTempFile
+                      ".project-" ".clj" (File. ^String (:root project)))]
+
+        (spit tmp-file
+              (rewrite-project-file (slurp prj-file-name) replacement-map))
+
+        (if (= desired-new-deps (:dependencies (project/read (str tmp-file))))
+          (.renameTo tmp-file (File. prj-file-name))
+          (throw (ex-info (str "Freshen mis-fire. See "
+                               tmp-file " for attempted change.")
+                          {:old-deps old-deps
+                           :replacement-map replacement-map
+                           :desired-new-deps desired-new-deps
+                           :tmp-file-name (str tmp-file)})))))))
+
 ;; === lein entrypoint ===
 
 (defn nope [& args]
@@ -215,7 +305,7 @@
 ;; lein commands?  Separate lein plugins?
 (def sub-commands
   {"build-deps" build-deps
-   "freshen" nope
+   "freshen" freshen
    "task-add" nope
    "new-task" nope})
 
