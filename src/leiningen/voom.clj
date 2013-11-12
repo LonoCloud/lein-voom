@@ -14,13 +14,16 @@
 (set! *warn-on-reflection* true)
 
 (defn git
-  [^File d & subcmd]
+  [{:keys [^File gitdir]} & subcmd]
   ;; We won't handle bare repos or displaced worktrees
-  (let [gitdir (.getPath d)
-        worktree (.getParent d)
-        rtn (apply sh "git" (str "--git-dir=" gitdir) (str "--work-tree=" worktree) subcmd)]
+  (let [dir-args (if (nil? gitdir)
+                   []
+                   [(str "--git-dir=" (.getPath gitdir))
+                    (str "--work-tree=" (.getParent gitdir))])
+        all-args (concat dir-args subcmd)
+        rtn (apply sh "git" all-args)]
     (when-not (zero? (:exit rtn))
-      (throw (ex-info "git error" rtn)))
+      (throw (ex-info "git error" (assoc rtn :git all-args))))
     rtn))
 
 ;; === git sha-based versions ===
@@ -34,19 +37,10 @@
            t))
 
 (defn get-voom-version
-  [path & [long-sha?]]
+  [path & {:keys [long-sha? gitdir]}]
   (let [shafmt (if long-sha? "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
-        {:keys [out exit err]} (sh "git" "log" "-1" fmt path)
-        ;; Throw exception if error?
-        [sha, datestr] (-> out s/trim (s/split #"," 2))
-        ctime (Date. ^String datestr)]
-    {:ctime ctime :sha sha}))
-
-(defn get-dir-voom-version
-  [dir path]
-  (let [{:keys [out exit err]} (git dir "log" "-1"  "--pretty=%h,%cd" "--" path)
-        ;; Throw exception if error?
+        {:keys [out exit err]} (git {:gitdir gitdir} "log" "-1" fmt path)
         [sha, datestr] (-> out s/trim (s/split #"," 2))
         ctime (Date. ^String datestr)]
     {:ctime ctime :sha sha}))
@@ -71,7 +65,7 @@
 
 (defn dirty-wc?
   [path]
-  (let [{:keys [out err exit]} (sh "git" "status" "--short" path)]
+  (let [{:keys [out err exit]} (git {} "status" "--short" path)]
     (not (empty? out))))
 
 
@@ -93,7 +87,7 @@
 
 (defn find-project-files
   [^File d]
-  (let [{:keys [out err exit]} (git d "ls-files" "project.clj" "**/project.clj")
+  (let [{:keys [out err exit]} (git {:gitdir d} "ls-files" "project.clj" "**/project.clj")
         projects (when-not (empty? out)
                    (s/split-lines out))]
     (map #(str (.getParent d) "/" %) projects)))
@@ -101,7 +95,7 @@
 (defn contains-sha? [d sha]
   (prn "contains-sha?" d sha)
   (->>
-   (git d "rev-parse" "--verify" "--quiet" sha)
+   (git {:gitdir d} "rev-parse" "--verify" "--quiet" sha)
    :exit
    zero?))
 
@@ -118,7 +112,7 @@
   [dirs]
   (doseq [^File d dirs]
     (println "Fetching:" (.getPath d))
-    (git d "fetch")))
+    (git {:gitdir d} "fetch")))
 
 (defn find-project
   [pgroup pname candidate]
@@ -141,7 +135,7 @@
                                (locate-sha dirs sha)))]
     (prn "sha-candidates" sha-candidates)
     (mapcat (fn [c]
-              (git c "checkout" sha)
+              (git {:gitdir c} "checkout" sha)
               (find-project groupId artifactId c))
             sha-candidates)))
 
@@ -229,8 +223,8 @@
   [dirs]
   (doseq [^File d dirs]
     (println "Checking out latest:" (.getPath d))
-    (git d "fetch")
-    (git d "checkout" "origin/HEAD")))
+    (git {:gitdir d} "fetch")
+    (git {:gitdir d} "checkout" "origin/HEAD")))
 
 ;; Add metadata pinning (how big to bump? all? minor? sha?) -- warn about not updating
 ;; Opt-in autobump  -- default to no major auto
@@ -241,7 +235,7 @@
           (for [dir dirs
                 prj-file (find-project-files dir)]
             (let [{:keys [group name version] :as prj} (project/read prj-file)
-                  gver (get-dir-voom-version dir (:root prj))
+                  gver (get-voom-version (:root prj) :gitdir dir)
                   qual (format-voom-ver gver timestamp-fmt)
                   new-ver (str (s/replace version #"-SNAPSHOT" "") qual)]
               [(symbol group name) new-ver])))))
@@ -331,7 +325,7 @@
   (let [[kstrs sargs] (split-with #(.startsWith ^String % ":") args)
         kargset (set (map #(keyword (subs % 1)) kstrs))
         long-sha (kargset :long-sha)
-        gver (-> project :root (get-voom-version long-sha))
+        gver (-> project :root (get-voom-version :long-sha? long-sha))
         qual (format-voom-ver gver timestamp-fmt)
         upfn #(str (s/replace % #"-SNAPSHOT" "") qual)
         nproj (update-in project [:version] upfn)
