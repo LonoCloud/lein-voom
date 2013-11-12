@@ -10,6 +10,11 @@ Tasks
 - task-wide git-reset: deps version walk tree from parent down deps / head sync all (likely to complain on dirty)     tasker reset HEAD; tasker reset deps
 - interactive child-to-parent dep walker: show dep order dirty / versions / dep skew                                  tasker walk ...or something
 
+
+Discussion with claggett:
+- Non-project related checkouts (top level READMEs, Gollum wikis, etc.?)
+- tasker -> box
+
 Other tools:
 ------------
 - git wrapper for working inside symlink sub-trees                 nuggit
