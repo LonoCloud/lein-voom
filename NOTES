@@ -5,7 +5,7 @@ Tasks
 - add projects (optional git repo arg, optional project arg)                                                          tasker add warg
   - add external repos, lono repos                                                                                    tasker add github.com:/clojure/core.async
   - common git repo aliases                                                                                           tasker add core.typed
-- update lein-checkouts to deps (transitive) (automatically by lots of commands) (or a lein hook to make checkouts always look right)
+- voom plugin detects .voom task dir and automatically makes classpaths like checkouts/
 
 - task-wide git-reset: deps version walk tree from parent down deps / head sync all (likely to complain on dirty)     tasker reset HEAD; tasker reset deps
 - interactive child-to-parent dep walker: show dep order dirty / versions / dep skew                                  tasker walk ...or something
