@@ -31,9 +31,9 @@ function box_find_project {
     local alts
     for r in ~/.voom-repos/*; do
         for p in $(box_git "$r" ls-files project.clj \*\*/project.clj); do
-            if box_git "$r" show HEAD:"$p" |egrep -q "^\(defproject +($prj|$prj/$prj)"; then
-                found=true
-                break
+            if box_git "$r" show HEAD:"$p" |egrep -q "^\(defproject +($prj|$prj/$prj) "; then
+                found=$(box_git "$r" show HEAD:"$p" |egrep -o "^\(defproject .*${prj}.*" |awk '{print $2}')
+                break 2
             elif box_git "$r" show HEAD:"$p" |egrep -q "^\(defproject .*$prj.*"; then
                 local s=$(box_git "$r" show HEAD:"$p" |egrep -o "^\(defproject .*${prj}.*" |awk '{print $2}')
                 alts="${alts}\n$prj may be $s in $(basename $r) .. $p"
@@ -41,7 +41,7 @@ function box_find_project {
         done
     done
     if [ -n "$found" ]; then
-        echo "Found $prj in $r ..  $p"
+        echo "Found $found in $r ..  $p"
     elif [ -n "$alts" ]; then
         echo -e "$alts"
     else
