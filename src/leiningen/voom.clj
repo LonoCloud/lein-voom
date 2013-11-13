@@ -50,6 +50,17 @@
   (let [{:keys [ctime sha]} gver]
     (str "-" (formatted-timestamp fmt ctime) "-g" sha)))
 
+
+(defn update-proj-version
+  [project long-sha?]
+  (let [gver (-> project :root (get-voom-version :long-sha? long-sha?))
+        qual (format-voom-ver gver timestamp-fmt)
+        upfn #(str (s/replace % #"-SNAPSHOT" "") qual)
+        nproj (update-in project [:version] upfn)
+        nmeta (update-in (meta project) [:without-profiles :version] upfn)
+        nnproj (with-meta nproj nmeta)]
+    nnproj))
+
 (defn ver-parse
   "Parses jar-path-like-string or artifact-version-string to find ctime and sha.
    Can handle cases in the range of:
@@ -325,19 +336,14 @@
   (let [[kstrs sargs] (split-with #(.startsWith ^String % ":") args)
         kargset (set (map #(keyword (subs % 1)) kstrs))
         long-sha (kargset :long-sha)
-        gver (-> project :root (get-voom-version :long-sha? long-sha))
-        qual (format-voom-ver gver timestamp-fmt)
-        upfn #(str (s/replace % #"-SNAPSHOT" "") qual)
-        nproj (update-in project [:version] upfn)
-        nmeta (update-in (meta project) [:without-profiles :version] upfn)
-        nnproj (with-meta nproj nmeta)]
+        new-project (update-proj-version project long-sha)]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
     (cond
-     (:print kargset) (println (upfn (:version project)))
+     (:print kargset) (println (:version new-project))
      (:parse kargset) (prn (ver-parse (first sargs)))
      :else (if-let [f (get sub-commands (first sargs))]
-             (apply f nnproj (rest sargs))
-             (if (and (dirty-wc? (:root project))
+             (apply f new-project (rest sargs))
+             (if (and (dirty-wc? (:root new-project))
                       (not (:insanely-allow-dirty-working-copy kargset)))
                (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
-               (lmain/resolve-and-apply nnproj sargs))))))
+               (lmain/resolve-and-apply new-project sargs))))))
