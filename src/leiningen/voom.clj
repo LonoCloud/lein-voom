@@ -305,6 +305,22 @@
                            :desired-new-deps desired-new-deps
                            :tmp-file-name (str tmp-file)})))))))
 
+(defn repo-project-files
+  [gitdir]
+  (->
+   (git {:gitdir gitdir} "ls-files" "project.clj" "**/project.clj")
+   :out
+   s/split-lines))
+
+(defn box-add
+  [proj & args]
+  (let [res (for [rdir (all-repos-dirs)
+                  pfile (repo-project-files rdir)]
+              [rdir pfile])]
+    (doseq [[^File r p] res]
+      (let [pf (str (.getParent r) "/" p)]
+        (prn (.getParent r) p (select-keys (project/read pf) [:group :name]))))))
+
 ;; === lein entrypoint ===
 
 (defn nope [& args]
@@ -315,7 +331,7 @@
 (def sub-commands
   {"build-deps" build-deps
    "freshen" freshen
-   "task-add" nope
+   "box-add" box-add
    "new-task" nope})
 
 (defn voom
