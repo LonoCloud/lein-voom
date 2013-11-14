@@ -1,0 +1,15 @@
+#!/bin/bash
+
+function fn_for_local_scope () {
+  local tmpfile=$(mktemp)
+
+  $(dirname $BASH_SOURCE)/bcore $tmpfile "$@"
+  local estat=$?
+
+  local out=$(cat $tmpfile)
+  rm $tmpfile
+  eval "$out"
+  return $estat
+}
+
+fn_for_local_scope "$@"
