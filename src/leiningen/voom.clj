@@ -237,6 +237,124 @@
     (git {:gitdir d} "fetch")
     (git {:gitdir d} "checkout" "origin/HEAD")))
 
+(defn read-project [gitdir sha prj-path]
+  (let [tmp-file (File/createTempFile ".project-" ".clj")
+        _ (spit tmp-file
+                (:out (git {:gitdir gitdir} "show" (str sha ":" prj-path))))
+        prj (try (project/read (str tmp-file))
+                 (catch Throwable t
+                   (throw (ex-info "Error reading project file"
+                                   {:project-file prj-path
+                                    :git-sha sha
+                                    :git-dir gitdir}
+                                   t))))]
+    (.delete tmp-file)
+    prj))
+
+
+(defn patch-fn
+  [f default-val]
+  (fn [filename & args]
+    (if (re-find #"\.lein|project[^/]*\.clj$" filename)
+      (apply f filename args)
+      default-val)))
+
+(defn robust-read-project
+  [gitdir sha prj-path]
+  (try
+    ;; Hack to work around our crazy project.clj files
+    (with-redefs [slurp (patch-fn slurp "{}")
+                  load-file (patch-fn load-file {})]
+      (read-project gitdir sha prj-path))
+    (catch Exception e
+      ;; 128 means git complained about
+      ;; something. Probably a non-existant
+      ;; project.clj at this sha.
+      (when-not (= 128 (:exit (ex-data e)))
+        (println "Skipping error:" (pr-str e)))
+      nil)))
+
+(defn re-quote [s]
+  (s/replace s #"\." "\\\\."))
+
+;; This is not right, at least when asking for the latest version
+(defn find-ver-part-projs
+  [gitdir prj-name ver-part]
+  (let [ver-ptn (re-pattern (str (re-quote ver-part) #"[-.].*"))
+        qprj (re-quote prj-name)
+        prj-ptn (if (= (name prj-name) (namespace prj-name))
+                  (str "(" (re-quote (name prj-name)) "|" qprj ")")
+                  qprj)
+        git-ptn (str #"\(defproject\s+" prj-ptn #"\s+\"" ver-ptn \")
+        _ (prn :git-ptn git-ptn)
+        r (git {:gitdir gitdir} "log" "--name-only" "--all" "--pretty=format:%H"
+                 "-G" git-ptn "--" "project.clj" "**/project.clj")
+        lines (s/split-lines (:out r))]
+    (->> lines
+         (reductions (fn [[sha v] line]
+                       (cond
+                        (empty? line) [nil nil]
+                        sha [sha {:sha sha :file line}]
+                        :else [line nil]))
+                     [nil nil])
+         (keep second)
+         (keep
+          (fn [{:keys [sha file]}]
+            (let [{:keys [group name version]} (read-project gitdir sha file)]
+              (prn group name version)
+              (when (and (re-matches ver-ptn version)
+                         (= prj-name (symbol group name)))
+                {:sha sha
+                 :v version}))))
+         first)))
+
+(defn likely-project-shas
+  "Return lazy seq of maps with :sha and :file keys, each representing
+  a sha of the given gitdir that has a change to the project.clj named
+  in the map. Ordered by newest to oldest."
+  [gitdir]
+  (let [r (git {:gitdir gitdir} "log" "--name-only" "--all"
+               "--pretty=format:%H" "--" "project.clj" "**/project.clj")]
+    (->> (s/split-lines (:out r))
+         (reductions (fn [[sha v] line]
+                       (cond
+                        (empty? line) [nil nil]
+                        sha [sha {:sha sha :file line}]
+                        :else [line nil]))
+                     [nil nil])
+         (keep second))))
+
+(defn report-progress
+  "Eagerly consume xs, but return a lazy seq that reports progress
+  every half second as the returned seq is consumed."
+  [msg xs]
+  (concat
+   (let [last-report (clojure.lang.Box. 0)
+         c (count xs)
+         digits (inc (long (quot (Math/log c) (Math/log 10))))]
+     (map-indexed
+      (fn [i x]
+        (let [now (System/currentTimeMillis)]
+          (when (< 500 (- now (.val last-report)))
+            (set! (.val last-report) now)
+            (printf (str "\r%s %" digits "d/%d ...") msg i c)
+            (flush)))
+        x)
+      xs))
+   (lazy-seq (println "done"))))
+
+(defn update-ver-cache
+  [gitdir]
+  (let [prj-changes (likely-project-shas gitdir)
+        sha-info (map
+                  (fn [{:keys [sha file]}]
+                    (when-let [p (robust-read-project gitdir sha file)]
+                      {:proj (symbol (:group p) (:name p))
+                       :v (:version p)
+                       :sha sha}))
+                  (report-progress gitdir prj-changes))]
+    (remove nil? sha-info)))
+
 ;; Add metadata pinning (how big to bump? all? minor? sha?) -- warn about not updating
 ;; Opt-in autobump  -- default to no major auto
 (defn get-fresh-versions []
