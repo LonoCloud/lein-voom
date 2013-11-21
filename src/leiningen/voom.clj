@@ -338,9 +338,9 @@
      (map-indexed
       (fn [i x]
         (let [now (System/currentTimeMillis)]
-          (when (< 500 (- now (.val last-report)))
+          (when (or (= (inc i) c) (< 500 (- now (.val last-report))))
             (set! (.val last-report) now)
-            (printf (str "\r%s %" digits "d/%d ...") msg i c)
+            (printf (str "\r%s %" digits "d/%d ...") msg (inc i) c)
             (flush)))
         x)
       xs))
