@@ -346,17 +346,101 @@
       xs))
    (lazy-seq (println "done"))))
 
-(defn update-ver-cache
+(defn parse-sha-refs
+  [s]
+  (let [[sha refstr] (vec (.split #":" s 2))
+        refs (when refstr
+               (when-let [[_ x] (re-find #"\((.*)\)" refstr)]
+                 (vec (.split #",\s+" x))))]
+    {:sha sha, :refs refs}))
+
+(defn project-change-shas
   [gitdir]
-  (let [prj-changes (likely-project-shas gitdir)
-        sha-info (map
-                  (fn [{:keys [sha file]}]
-                    (when-let [p (robust-read-project gitdir sha file)]
-                      {:proj (symbol (:group p) (:name p))
-                       :v (:version p)
-                       :sha sha}))
-                  (report-progress gitdir prj-changes))]
-    (remove nil? sha-info)))
+  (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H:%d"
+            "--name-status" "--" "project.clj" "**/project.clj")
+       :lines
+       (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
+                {:op op :path path}
+                (when (seq %)
+                  (parse-sha-refs %))))
+       (#(concat % [{:sha "end sigil"}]))
+       (reductions (fn [[partial complete] entry]
+                     (if (:sha entry)
+                       [entry partial]
+                       [(update-in partial [:ops] (fnil conj []) entry) nil]))
+                   [nil nil])
+       (keep second)))
+
+(defn tag-projects
+  [gitdir]
+  (let [proj-shas (project-change-shas gitdir)]
+    (doseq [{:keys [sha refs ops]} (report-progress gitdir proj-shas)
+            :while (not-any? #(.startsWith ^String % "tag: voom-") refs)
+            {:keys [op path]} ops]
+      (when-let [p (and (not= "D" op)
+                        (robust-read-project gitdir sha path))]
+        (let [tag (s/join "--" ["voom"
+                                (str (:group p) "%" (:name p))
+                                (:version p)
+                                (s/replace (:root p) #"/" "%")
+                                (subs sha 0 7)])]
+          (git {:gitdir gitdir} "tag" tag sha))))))
+
+(defn clear-voom-tags
+  [gitdir]
+  (let [tags (->> (git {:gitdir gitdir} "tag" "--list" "voom-*")
+                  :lines
+                  (remove empty?))]
+    (when (seq tags)
+      (apply git {:gitdir gitdir} "tag" "--delete" tags)
+      nil)))
+
+(defn parse-tag
+  [tag]
+  (->
+   (zipmap [:prefix :proj :ver :path :sha] (s/split tag #"--"))
+   (update-in [:path] (fnil s/replace "") #"%" "/")))
+
+(defn newest-voom-ver-by-spec
+  [proj-name ver-spec {:keys [repo ref path]}]
+
+  (for [gitdir (all-repos-dirs)]
+    (let [ptn (s/join "--" ["voom"
+                       (str (namespace proj-name) "%" (name proj-name))
+                       (str ver-spec "*")])
+          tags (:lines (git {:gitdir gitdir} "tag" "--list" ptn))
+          ;;_ (prn :tags tags)
+          tspecs (if (= tags [""])
+                   []
+                   (map parse-tag tags))
+          paths (set (map :path tspecs))]
+
+      (doall
+       (for [path paths
+             branch (map #(re-find #"[^/]*/+[^/]*$" (str %))
+                         (glob (str gitdir "/refs/remotes/*/*")))
+             :let [commits
+                   , (map
+                      parse-sha-refs
+                      (:lines (apply git {:gitdir gitdir} "log"
+                                     "--pretty=format:%H:%d" "--decorate" "--reverse"
+                                     (concat (map #(str "^" % "^") tags)
+                                             [branch "--" path]))))]
+             :when (seq commits)]
+         (some (fn [[current next-commit]]
+                 #_(prn :refs path (:refs next-commit))
+                 (when (or (= :end next-commit)
+                           (some #(= path (:path (parse-tag %)))
+                                 (:refs next-commit)))
+                   {:sha (:sha current)
+                    :path path
+                    :gitdir gitdir
+                    :branch branch}))
+               (partition 2 1 (concat commits [:end]))))))))
+
+
+
+
 
 ;; Add metadata pinning (how big to bump? all? minor? sha?) -- warn about not updating
 ;; Opt-in autobump  -- default to no major auto
