@@ -2,6 +2,7 @@
   (:require [clojure.java.shell :refer [sh]]
             [clojure.string :as s]
             [clojure.pprint :refer [pprint]]
+            [clojure.java.io :as io]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [org.satta.glob :refer [glob]]
@@ -240,7 +241,8 @@
   (let [tmp-file (File/createTempFile ".project-" ".clj")
         _ (spit tmp-file
                 (:out (git {:gitdir gitdir} "show" (str sha ":" prj-path))))
-        prj (try (project/read (str tmp-file))
+        prj (try (assoc (project/read (str tmp-file))
+                   :root (or (.getParent (io/file prj-path)) ""))
                  (catch Throwable t
                    (throw (ex-info "Error reading project file"
                                    {:project-file prj-path
