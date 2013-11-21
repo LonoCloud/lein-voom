@@ -24,7 +24,8 @@
         rtn (apply sh "git" all-args)]
     (when-not (zero? (:exit rtn))
       (throw (ex-info "git error" (assoc rtn :git all-args))))
-    rtn))
+    (assoc rtn :lines (when (not= "\n" (:out rtn))
+                        (re-seq #"(?m)^.*$" (:out rtn))))))
 
 ;; === git sha-based versions ===
 
@@ -98,10 +99,8 @@
 
 (defn find-project-files
   [^File d]
-  (let [{:keys [out err exit]} (git {:gitdir d} "ls-files" "project.clj" "**/project.clj")
-        projects (when-not (empty? out)
-                   (s/split-lines out))]
-    (map #(str (.getParent d) "/" %) projects)))
+  (let [{:keys [lines]} (git {:gitdir d} "ls-files" "project.clj" "**/project.clj")]
+    (map #(str (.getParent d) "/" %) lines)))
 
 (defn contains-sha? [d sha]
   (prn "contains-sha?" d sha)
@@ -287,9 +286,8 @@
                   qprj)
         git-ptn (str #"\(defproject\s+" prj-ptn #"\s+\"" ver-ptn \")
         _ (prn :git-ptn git-ptn)
-        r (git {:gitdir gitdir} "log" "--name-only" "--all" "--pretty=format:%H"
-                 "-G" git-ptn "--" "project.clj" "**/project.clj")
-        lines (s/split-lines (:out r))]
+        {:keys [lines]} (git {:gitdir gitdir} "log" "--name-only" "--all" "--pretty=format:%H"
+                             "-G" git-ptn "--" "project.clj" "**/project.clj")]
     (->> lines
          (reductions (fn [[sha v] line]
                        (cond
@@ -315,7 +313,7 @@
   [gitdir]
   (let [r (git {:gitdir gitdir} "log" "--name-only" "--all"
                "--pretty=format:%H" "--" "project.clj" "**/project.clj")]
-    (->> (s/split-lines (:out r))
+    (->> (:lines r)
          (reductions (fn [[sha v] line]
                        (cond
                         (empty? line) [nil nil]
@@ -427,8 +425,7 @@
   [gitdir]
   (->
    (git {:gitdir gitdir} "ls-files" "project.clj" "**/project.clj")
-   :out
-   s/split-lines))
+   :lines))
 
 (defn box-add
   [proj & args]
