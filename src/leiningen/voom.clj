@@ -485,6 +485,17 @@
           :when (.contains ^String proj dep) ]
       proj)))
 
+(defn find-box
+  "Locates voom-box root starting from current working directory."
+  [& args]
+  (loop [path (File. (System/getProperty "user.dir"))]
+    (let [ppath (.getCanonicalPath path)
+          pfile (File. (str ppath "/.voom-box"))]
+      (when-not (= "/" ppath)
+        (if (.exists pfile)
+          path
+          (recur (.getParentFile path)))))))
+
 (defn box-add
   [proj & deps]
   (doseq [dep deps]
