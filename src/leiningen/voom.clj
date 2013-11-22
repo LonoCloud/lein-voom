@@ -24,7 +24,7 @@
                     (str "--work-tree=" (.getParent gitdir))])
         all-args (concat dir-args subcmd)
         {:keys [exit] :as rtn} (apply sh "git" all-args)]
-    (when-not (contains? ok-statuses exit)
+    (when-not (ok-statuses exit)
       (throw (ex-info "git error" (assoc rtn :git all-args))))
     (assoc rtn :lines (when (not= "\n" (:out rtn))
                         (re-seq #"(?m)^.*$" (:out rtn))))))
