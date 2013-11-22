@@ -42,7 +42,7 @@
   [path & {:keys [long-sha? gitdir]}]
   (let [shafmt (if long-sha? "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
-        {:keys [out exit err]} (git {:gitdir gitdir} "log" "-1" fmt path)
+        {:keys [out]} (git {:gitdir gitdir} "log" "-1" fmt path)
         [sha, datestr] (-> out s/trim (s/split #"," 2))
         ctime (Date. ^String datestr)]
     {:ctime ctime :sha sha}))
@@ -348,15 +348,15 @@
 
 (defn parse-sha-refs
   [s]
-  (let [[sha refstr] (vec (.split #":" s 2))
+  (let [[sha datestr refstr] (vec (.split #"," s 3))
         refs (when refstr
                (when-let [[_ x] (re-find #"\((.*)\)" refstr)]
                  (vec (.split #",\s+" x))))]
-    {:sha sha, :refs refs}))
+    {:sha sha, :ctime (Date. ^String datestr), :refs refs}))
 
 (defn project-change-shas
   [gitdir]
-  (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H:%d"
+  (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H,%cd,%d"
             "--name-status" "--" "project.clj" "**/project.clj")
        :lines
        (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
@@ -421,7 +421,7 @@
               , (map
                  parse-sha-refs
                  (:lines (apply git {:gitdir gitdir} "log"
-                                "--pretty=format:%H:%d" "--decorate" "--reverse"
+                                "--pretty=format:%H,%cd,%d" "--decorate" "--reverse"
                                 (concat (map #(str "^" % "^") tags)
                                         [branch "--" path]))))]
         :when (seq commits)]
@@ -433,6 +433,7 @@
                         (some #(= path (:path (parse-tag %)))
                               (:refs next-commit)))
                 {:sha (:sha current)
+                 :ctime (:ctime current)
                  :ver (-> reflist first :ver)
                  :path path
                  :proj proj-name
