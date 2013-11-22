@@ -106,7 +106,7 @@
 (defn contains-sha? [d sha]
   (prn "contains-sha?" d sha)
   (->>
-   (git {:gitdir d} "rev-parse" "--verify" "--quiet" sha)
+   (git {:gitdir d :ok-statuses #{0 1}} "rev-parse" "--verify" "--quiet" sha)
    :exit
    zero?))
 
