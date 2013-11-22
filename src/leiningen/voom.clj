@@ -552,7 +552,7 @@
    "box-add" box-add
    "new-task" nope})
 
-(defn voom
+(defn ^:no-project-needed voom
   "Usage:
     lein voom [flags] [lein command ...]
       Runs lein command with a project version augmented with git
@@ -570,14 +570,14 @@
   (let [[kstrs sargs] (split-with #(.startsWith ^String % ":") args)
         kargset (set (map #(keyword (subs % 1)) kstrs))
         long-sha (kargset :long-sha)
-        new-project (update-proj-version project long-sha)]
+        new-project (delay (update-proj-version project long-sha))]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
     (cond
-     (:print kargset) (println (:version new-project))
+     (:print kargset) (println (:version @new-project))
      (:parse kargset) (prn (ver-parse (first sargs)))
      :else (if-let [f (get sub-commands (first sargs))]
-             (apply f new-project (rest sargs))
-             (if (and (dirty-wc? (:root new-project))
+             (apply f @new-project (rest sargs))
+             (if (and (dirty-wc? (:root @new-project))
                       (not (:insanely-allow-dirty-working-copy kargset)))
                (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
-               (lmain/resolve-and-apply new-project sargs))))))
+               (lmain/resolve-and-apply @new-project sargs))))))
