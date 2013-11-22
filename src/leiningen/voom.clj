@@ -49,16 +49,15 @@
     {:ctime ctime :sha sha}))
 
 (defn format-voom-ver
-  [gver fmt]
-  (let [{:keys [ctime sha]} gver]
-    (str "-" (formatted-timestamp fmt ctime) "-g" sha)))
-
+  [gver]
+  (let [{:keys [ver ctime sha]} gver]
+    (str (s/replace ver #"-SNAPSHOT" "")
+         "-" (formatted-timestamp timestamp-fmt ctime) "-g" sha)))
 
 (defn update-proj-version
   [project long-sha?]
   (let [gver (-> project :root (get-voom-version :long-sha? long-sha?))
-        qual (format-voom-ver gver timestamp-fmt)
-        upfn #(str (s/replace % #"-SNAPSHOT" "") qual)
+        upfn #(format-voom-ver (assoc gver :ver %))
         nproj (update-in project [:version] upfn)
         nmeta (update-in (meta project) [:without-profiles :version] upfn)
         nnproj (with-meta nproj nmeta)]
@@ -139,6 +138,8 @@
   "[project {groupId name ctime sha}] [project coordinate-string]"
   [repos-dir pspec]
   (prn "find-matching-projects" repos-dir pspec)
+  ;; TODO: find correct sha and project.clj more efficiently and with
+  ;; less ambiguity. (only consider projects changed at the given sha)
   (let [{:keys [sha artifactId groupId]} pspec
         dirs (all-repos-dirs)
         sha-candidates (locate-sha dirs sha)
@@ -446,27 +447,23 @@
                  :branch branch}))
             (partition 2 1 (concat commits [:end]))))))
 
-;; Add metadata pinning (how big to bump? all? minor? sha?) -- warn about not updating
-;; Opt-in autobump  -- default to no major auto
-(defn get-fresh-versions []
-  (let [dirs (all-repos-dirs)
-        _ (fetch-checkout-all dirs)]
-    (into {}
-          (for [dir dirs
-                prj-file (find-project-files dir)]
-            (let [{:keys [group name version] :as prj} (project/read prj-file)
-                  gver (get-voom-version (:root prj) :gitdir dir)
-                  qual (format-voom-ver gver timestamp-fmt)
-                  new-ver (str (s/replace version #"-SNAPSHOT" "") qual)]
-              [(symbol group name) new-ver])))))
-
-(defn fresh-version [fresh-versions-map [prj ver :as dep]]
-  (if-let [new-ver (get fresh-versions-map prj)]
-    (assoc dep 1 new-ver)
-    (do
-      (when (ver-parse ver)
-        (println "Warning: didn't find or freshen voom-version dep" dep))
-      dep)))
+(defn fresh-version [[prj ver :as dep]]
+  (let [voom-meta (:voom-bump (meta dep))
+        ver-spec (or (:version voom-meta)
+                     (re-find #"^[^.]+." ver))
+        groups (->> (newest-voom-ver-by-spec prj ver-spec voom-meta)
+                    (map #(assoc % :voom-ver (format-voom-ver
+                                              (update-in % [:sha] subs 0 7))))
+                    (group-by :voom-ver))]
+    (case (count groups)
+     0 (do (println "No matching version found for" prj (pr-str ver-spec))
+           dep)
+     1 (assoc dep 1 (key (first groups)))
+     (do (println "\nMultiple bump resolutions for:"
+                  prj (pr-str ver-spec) (pr-str voom-meta))
+         (doseq [[voom-ver group] groups]
+           (prn voom-ver (map #(select-keys % [:gitdir :branch :path :ctime]) group)))
+         dep))))
 
 (defn rewrite-project-file [input-str replacement-map]
   (reduce (fn [^String text [[prj old-ver :as old-dep] [_ new-ver]]]
@@ -488,8 +485,7 @@
 (defn freshen [project & args]
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
-        fresh-versions-map (get-fresh-versions)
-        desired-new-deps (map #(fresh-version fresh-versions-map %) old-deps)]
+        desired-new-deps (doall (map #(fresh-version %) old-deps))]
     (doseq [[[prj old-ver] [_ new-ver]] (map list old-deps desired-new-deps)]
       (println (format "%-40s" prj)
                (str old-ver
