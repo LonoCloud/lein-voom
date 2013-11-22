@@ -404,47 +404,41 @@
 (defn newest-voom-ver-by-spec
   [proj-name ver-spec {:keys [repo ref path]}]
 
-  (for [gitdir (all-repos-dirs)]
-    (let [ptn (s/join "--" ["voom"
-                       (str (namespace proj-name) "%" (name proj-name))
-                       (str ver-spec "*")])
-          tags (:lines (git {:gitdir gitdir} "tag" "--list" ptn))
-          ;;_ (prn :tags tags)
-          tspecs (if (= tags [""])
-                   []
-                   (map parse-tag tags))
-          paths (set (map :path tspecs))]
-
-      (doall
-       (for [path paths
-             branch (map #(re-find #"[^/]*/+[^/]*$" (str %))
-                         (glob (str gitdir "/refs/remotes/*/*")))
-             :let [commits
-                   , (map
-                      parse-sha-refs
-                      (:lines (apply git {:gitdir gitdir} "log"
-                                     "--pretty=format:%H:%d" "--decorate" "--reverse"
-                                     (concat (map #(str "^" % "^") tags)
-                                             [branch "--" path]))))]
-             :when (seq commits)]
-         (let [refs (-> commits first :refs)
-               reflist (filter #(= path (:path %)) (map parse-tag refs))]
-           (some (fn [[current next-commit]]
-                   #_(prn :refs path (:refs next-commit))
-                   (when (or (= :end next-commit)
-                             (some #(= path (:path (parse-tag %)))
-                                   (:refs next-commit)))
-                     {:sha (:sha current)
-                      :ver (-> reflist first :ver)
-                      :path path
-                      :proj proj-name
-                      :gitdir gitdir
-                      :branch branch}))
-                 (partition 2 1 (concat commits [:end])))))))))
-
-
-
-
+  (for [gitdir (all-repos-dirs)
+        :let [ptn (s/join "--" ["voom"
+                                (str (namespace proj-name) "%" (name proj-name))
+                                (str ver-spec "*")])
+              tags (:lines (git {:gitdir gitdir} "tag" "--list" ptn))
+              ;;_ (prn :tags tags)
+              tspecs (if (= tags [""])
+                       []
+                       (map parse-tag tags))
+              paths (set (map :path tspecs))]
+        path paths
+        branch (map #(re-find #"[^/]*/+[^/]*$" (str %))
+                    (glob (str gitdir "/refs/remotes/*/*")))
+        :let [commits
+              , (map
+                 parse-sha-refs
+                 (:lines (apply git {:gitdir gitdir} "log"
+                                "--pretty=format:%H:%d" "--decorate" "--reverse"
+                                (concat (map #(str "^" % "^") tags)
+                                        [branch "--" path]))))]
+        :when (seq commits)]
+    (let [refs (-> commits first :refs)
+          reflist (filter #(= path (:path %)) (map parse-tag refs))]
+      (some (fn [[current next-commit]]
+              #_(prn :refs path (:refs next-commit))
+              (when (or (= :end next-commit)
+                        (some #(= path (:path (parse-tag %)))
+                              (:refs next-commit)))
+                {:sha (:sha current)
+                 :ver (-> reflist first :ver)
+                 :path path
+                 :proj proj-name
+                 :gitdir gitdir
+                 :branch branch}))
+            (partition 2 1 (concat commits [:end]))))))
 
 ;; Add metadata pinning (how big to bump? all? minor? sha?) -- warn about not updating
 ;; Opt-in autobump  -- default to no major auto
