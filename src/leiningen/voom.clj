@@ -427,16 +427,20 @@
                                      (concat (map #(str "^" % "^") tags)
                                              [branch "--" path]))))]
              :when (seq commits)]
-         (some (fn [[current next-commit]]
-                 #_(prn :refs path (:refs next-commit))
-                 (when (or (= :end next-commit)
-                           (some #(= path (:path (parse-tag %)))
-                                 (:refs next-commit)))
-                   {:sha (:sha current)
-                    :path path
-                    :gitdir gitdir
-                    :branch branch}))
-               (partition 2 1 (concat commits [:end]))))))))
+         (let [refs (-> commits first :refs)
+               reflist (filter #(= path (:path %)) (map parse-tag refs))]
+           (some (fn [[current next-commit]]
+                   #_(prn :refs path (:refs next-commit))
+                   (when (or (= :end next-commit)
+                             (some #(= path (:path (parse-tag %)))
+                                   (:refs next-commit)))
+                     {:sha (:sha current)
+                      :ver (-> reflist first :ver)
+                      :path path
+                      :proj proj-name
+                      :gitdir gitdir
+                      :branch branch}))
+                 (partition 2 1 (concat commits [:end])))))))))
 
 
 
