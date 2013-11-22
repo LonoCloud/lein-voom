@@ -371,7 +371,7 @@
                    [nil nil])
        (keep second)))
 
-(defn tag-projects
+(defn tag-repo-projects
   [gitdir]
   (let [proj-shas (project-change-shas gitdir)]
     (doseq [{:keys [sha refs ops]} (report-progress gitdir proj-shas)
