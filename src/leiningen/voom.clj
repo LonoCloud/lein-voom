@@ -292,55 +292,6 @@
         (println "Ignoring error:" (pr-str e)))
       nil)))
 
-(defn re-quote [s]
-  (s/replace s #"\." "\\\\."))
-
-;; This is not right, at least when asking for the latest version
-(defn find-ver-part-projs
-  [gitdir prj-name ver-part]
-  (let [ver-ptn (re-pattern (str (re-quote ver-part) #"[-.].*"))
-        qprj (re-quote prj-name)
-        prj-ptn (if (= (name prj-name) (namespace prj-name))
-                  (str "(" (re-quote (name prj-name)) "|" qprj ")")
-                  qprj)
-        git-ptn (str #"\(defproject\s+" prj-ptn #"\s+\"" ver-ptn \")
-        _ (prn :git-ptn git-ptn)
-        {:keys [lines]} (git {:gitdir gitdir} "log" "--name-only" "--all" "--pretty=format:%H"
-                             "-G" git-ptn "--" "project.clj" "**/project.clj")]
-    (->> lines
-         (reductions (fn [[sha v] line]
-                       (cond
-                        (empty? line) [nil nil]
-                        sha [sha {:sha sha :file line}]
-                        :else [line nil]))
-                     [nil nil])
-         (keep second)
-         (keep
-          (fn [{:keys [sha file]}]
-            (let [{:keys [group name version]} (read-project gitdir sha file)]
-              (prn group name version)
-              (when (and (re-matches ver-ptn version)
-                         (= prj-name (symbol group name)))
-                {:sha sha
-                 :v version}))))
-         first)))
-
-(defn likely-project-shas
-  "Return lazy seq of maps with :sha and :file keys, each representing
-  a sha of the given gitdir that has a change to the project.clj named
-  in the map. Ordered by newest to oldest."
-  [gitdir]
-  (let [r (git {:gitdir gitdir} "log" "--name-only" "--all"
-               "--pretty=format:%H" "--" "project.clj" "**/project.clj")]
-    (->> (:lines r)
-         (reductions (fn [[sha v] line]
-                       (cond
-                        (empty? line) [nil nil]
-                        sha [sha {:sha sha :file line}]
-                        :else [line nil]))
-                     [nil nil])
-         (keep second))))
-
 (defn report-progress
   "Eagerly consume xs, but return a lazy seq that reports progress
   every half second as the returned seq is consumed."
