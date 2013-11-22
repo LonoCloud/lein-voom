@@ -384,7 +384,7 @@
         branch (map #(re-find #"[^/]*/+[^/]*$" (str %))
                     (glob (str gitdir "/refs/remotes/*/*")))
         :let [neg-tags (map #(str "^" % "^") tags)
-              neg-tags (filter #(= 0 (:exit (git {:gitdir gitdir :ok-statuses #{0 1}} "rev-parse" "--verify" "--quiet" (str %)))) neg-tags)
+              neg-tags (filter (partial contains-sha? gitdir) neg-tags)
               commits
               , (map
                  parse-sha-refs
