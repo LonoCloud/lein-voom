@@ -523,7 +523,7 @@
                    (map #(s/replace (second (s/split % #"--")) #"%" "/")
                         (:lines (git {:gitdir g} "tag" "--list" "voom--*"))))))]
     (for [proj proj-set
-          :when (.contains proj dep) ]
+          :when (.contains ^String proj dep) ]
       proj)))
 
 (defn box-add
