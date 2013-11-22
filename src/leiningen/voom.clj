@@ -419,16 +419,19 @@
         path paths
         branch (map #(re-find #"[^/]*/+[^/]*$" (str %))
                     (glob (str gitdir "/refs/remotes/*/*")))
-        :let [commits
+        :let [neg-tags (map #(str "^" % "^") tags)
+              neg-tags (filter #(= 0 (:exit (git {:gitdir gitdir :ok-statuses #{0 1}} "rev-parse" "--verify" "--quiet" (str %)))) neg-tags)
+              commits
               , (map
                  parse-sha-refs
                  (:lines (apply git {:gitdir gitdir} "log"
                                 "--pretty=format:%H,%cd,%d" "--decorate" "--reverse"
-                                (concat (map #(str "^" % "^") tags)
-                                        [branch "--" path]))))]
+                                (concat neg-tags [branch "--" path]))))]
         :when (seq commits)]
     (let [refs (-> commits first :refs)
-          reflist (filter #(= path (:path %)) (map parse-tag refs))]
+          reflist (filter #(and
+                            (= (str proj-name) (:proj %))
+                            (= path (:path %))) (map parse-tag refs))]
       (some (fn [[current next-commit]]
               #_(prn :refs path (:refs next-commit))
               (when (or (= :end next-commit)
