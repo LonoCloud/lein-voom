@@ -90,6 +90,18 @@
                     (str (System/getProperty "user.home")
                          (str "/.voom-repos"))))
 
+(defn remotes
+  "For a given .git directory, returns a map like:
+  {:origin {:push  \"git@github.com:abrooks/lein-voom.git\",
+            :fetch \"git@github.com:abrooks/lein-voom.git\"}}"
+  [gitdir]
+  (reduce
+   (fn [m line]
+     (let [[_ remote url direction] (re-matches #"(.*)\t(.*)\s+\(([^)]*)\)$" line)]
+       (assoc-in m [(keyword remote) (keyword direction)] url)))
+   {}
+   (:lines (git {:gitdir gitdir} "remote" "-v"))))
+
 (defn with-log-level [level f]
   (let [handlers (doall (.getHandlers (Logger/getLogger "")))
         old-levels (doall (map #(.getLevel ^Handler %) handlers))
