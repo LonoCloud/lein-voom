@@ -15,15 +15,16 @@
 (set! *warn-on-reflection* true)
 
 (defn git
-  [{:keys [^File gitdir]} & subcmd]
+  [{:keys [^File gitdir ok-statuses]
+    :or {ok-statuses #{0}}} & subcmd]
   ;; We won't handle bare repos or displaced worktrees
   (let [dir-args (if (nil? gitdir)
                    []
                    [(str "--git-dir=" (.getPath gitdir))
                     (str "--work-tree=" (.getParent gitdir))])
         all-args (concat dir-args subcmd)
-        rtn (apply sh "git" all-args)]
-    (when-not (zero? (:exit rtn))
+        {:keys [exit] :as rtn} (apply sh "git" all-args)]
+    (when-not (contains? ok-statuses exit)
       (throw (ex-info "git error" (assoc rtn :git all-args))))
     (assoc rtn :lines (when (not= "\n" (:out rtn))
                         (re-seq #"(?m)^.*$" (:out rtn))))))
