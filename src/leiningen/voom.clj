@@ -514,20 +514,30 @@
                            :desired-new-deps desired-new-deps
                            :tmp-file-name (str tmp-file)})))))))
 
-(defn repo-project-files
-  [gitdir]
-  (->
-   (git {:gitdir gitdir} "ls-files" "project.clj" "**/project.clj")
-   :lines))
+(defn resolve-short-proj
+  [dep]
+  (let [proj-set
+        , (into #{}
+                (flatten
+                 (for [g (all-repos-dirs)]
+                   (map #(s/replace (second (s/split % #"--")) #"%" "/")
+                        (:lines (git {:gitdir g} "tag" "--list" "voom--*"))))))]
+    (for [proj proj-set
+          :when (.contains proj dep) ]
+      proj)))
 
 (defn box-add
-  [proj & args]
-  (let [res (for [rdir (all-repos-dirs)
-                  pfile (repo-project-files rdir)]
-              [rdir pfile])]
-    (doseq [[^File r p] res]
-      (let [pf (str (.getParent r) "/" p)]
-        (prn (.getParent r) p (select-keys (project/read pf) [:group :name]))))))
+  [proj & deps]
+  (doseq [dep deps]
+    (let [full-projs (resolve-short-proj (name dep))
+          full-projs (map symbol full-projs)
+          repo-infos (mapcat #(newest-voom-ver-by-spec % "" {}) full-projs)]
+      (if (< 1 (count repo-infos))
+        (do
+          (println "Multiple projects / locations match" (str \" dep \"\:))
+          (doseq [r repo-infos]
+            (prn r)))
+        (prn "Found:" (first repo-infos))))))
 
 ;; === lein entrypoint ===
 
