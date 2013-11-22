@@ -400,7 +400,8 @@
   [tag]
   (->
    (zipmap [:prefix :proj :ver :path :sha] (s/split tag #"--"))
-   (update-in [:path] (fnil s/replace "") #"%" "/")))
+   (update-in [:path] (fnil s/replace "") #"%" "/")
+   (update-in [:proj] (fnil s/replace "") #"%" "/")))
 
 (defn newest-voom-ver-by-spec
   [proj-name ver-spec {:keys [repo ref path]}]
