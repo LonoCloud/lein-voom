@@ -374,8 +374,7 @@
   [proj-name ver-spec {:keys [repo branch path]}]
 
   (for [gitdir (all-repos-dirs)
-        :let [found-repo (-> (remotes gitdir) :origin :fetch)]
-        :when (or (= found-repo repo) (nil? repo))
+        :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
         :let [ptn (s/join "--" ["voom"
                                 (str (namespace proj-name) "%" (name proj-name))
                                 (str ver-spec "*")])
@@ -414,7 +413,6 @@
                  :path found-path
                  :proj proj-name
                  :gitdir gitdir
-                 :repo found-repo
                  :branch found-branch}))
             (partition 2 1 (concat commits [:end]))))))
 
@@ -433,7 +431,9 @@
      (do (println "\nMultiple bump resolutions for:"
                   prj (pr-str ver-spec) (pr-str voom-meta))
          (doseq [[voom-ver group] groups]
-           (prn voom-ver (map #(select-keys % [:repo :branch :path :ctime]) group)))
+           (prn voom-ver (map #(assoc (select-keys % [:branch :path :ctime])
+                                 :repo (-> (remotes (:gitdir %)) :origin :fetch))
+                              group)))
          dep))))
 
 (defn rewrite-project-file [input-str replacement-map]
