@@ -419,7 +419,7 @@
             (partition 2 1 (concat commits [:end]))))))
 
 (defn fresh-version [[prj ver :as dep]]
-  (let [voom-meta (:voom-bump (meta dep))
+  (let [voom-meta (:voom (meta dep))
         ver-spec (or (:version voom-meta)
                      (re-find #"^[^.]+." ver))
         groups (->> (newest-voom-ver-by-spec prj ver-spec voom-meta)
