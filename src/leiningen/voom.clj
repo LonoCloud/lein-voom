@@ -365,6 +365,13 @@
       (apply git {:gitdir gitdir} "tag" "--delete" tags)
       nil)))
 
+(defn retag
+  "Clear and retag all repos in .voom-repos"
+  [project & args]
+  (doseq [gitdir (all-repos-dirs)]
+    (clear-voom-tags gitdir)
+    (tag-repo-projects gitdir)))
+
 (defn parse-tag
   [tag]
   (->
@@ -530,6 +537,7 @@
   {"build-deps" build-deps
    "freshen" freshen
    "box-add" box-add
+   "retag" retag
    "new-task" nope})
 
 (defn ^:no-project-needed voom
