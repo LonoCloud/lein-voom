@@ -316,15 +316,15 @@
 
 (defn parse-sha-refs
   [s]
-  (let [[sha datestr refstr] (vec (.split #"," s 3))
+  (let [[sha datestr parents refstr] (vec (.split #"," s 4))
         refs (when refstr
                (when-let [[_ x] (re-find #"\((.*)\)" refstr)]
                  (vec (.split #",\s+" x))))]
-    {:sha sha, :ctime (Date. ^String datestr), :refs refs}))
+    {:sha sha, :ctime (Date. ^String datestr), :parents parents, :refs refs}))
 
 (defn project-change-shas
   [gitdir]
-  (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H,%cd,%d"
+  (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H,%cd,%p,%d"
             "--name-status" "-m" "--" "project.clj" "**/project.clj")
        :lines
        (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
@@ -342,17 +342,19 @@
 (defn tag-repo-projects
   [gitdir]
   (let [proj-shas (project-change-shas gitdir)]
-    (doseq [{:keys [sha refs ops]} (report-progress gitdir proj-shas)
+    (doseq [{:keys [sha refs parents ops]} (report-progress gitdir proj-shas)
             :when (not-any? #(.startsWith ^String % "tag: voom-") refs)
             {:keys [op path]} ops]
       (when-let [p (and (not= "D" op)
                         (robust-read-project gitdir sha path))]
-        (let [tag (s/join "--" ["voom"
-                                (str (:group p) "%" (:name p))
-                                (:version p)
-                                (s/replace (:root p) #"/" "%")
-                                (subs sha 0 7)])]
-          (git {:gitdir gitdir} "tag" tag sha))))))
+        (let [tag (s/join "--" (-> ["voom"
+                                    (str (:group p) "%" (:name p))
+                                    (:version p)
+                                    (s/replace (:root p) #"/" "%")
+                                    (subs sha 0 7)]
+                                   (cond-> (empty? parents)
+                                     (conj "no-parent"))))]
+          (git {:gitdir gitdir} "tag" "-f" tag sha))))))
 
 (defn clear-voom-tags
   [gitdir]
@@ -366,7 +368,7 @@
 (defn parse-tag
   [tag]
   (->
-   (zipmap [:prefix :proj :ver :path :sha] (s/split tag #"--"))
+   (zipmap [:prefix :proj :ver :path :sha :no-parent] (s/split tag #"--"))
    (update-in [:path] (fnil s/replace "") #"%" "/")
    (update-in [:proj] (fnil s/replace "") #"%" "/")))
 
@@ -389,13 +391,13 @@
         found-branch (map #(.getName ^File %)
                           (glob (str gitdir "/refs/remotes/origin/*")))
         :when (or (= found-branch branch) (nil? branch))
-        :let [neg-tags (map #(str "^" % "^") tags)
-              neg-tags (filter (partial contains-sha? gitdir) neg-tags)
+        :let [tags-with-parents (remove #(.endsWith ^String % "--no-parent") tags)
+              neg-tags (map #(str "^" % "^") tags-with-parents)
               commits
               , (map
                  parse-sha-refs
                  (:lines (apply git {:gitdir gitdir} "log"
-                                "--pretty=format:%H,%cd,%d" "--decorate" "--reverse"
+                                "--pretty=format:%H,%cd,%p,%d" "--reverse"
                                 (concat neg-tags [(str "origin/" found-branch) "--" found-path]))))]
         :when (seq commits)]
     (let [refs (-> commits first :refs)
