@@ -23,6 +23,7 @@
                    [(str "--git-dir=" (.getPath gitdir))
                     (str "--work-tree=" (.getParent gitdir))])
         all-args (concat dir-args subcmd)
+        ;; _ (prn :calling (doall (cons 'git all-args)))
         {:keys [exit] :as rtn} (apply sh "git" all-args)]
     (when-not (ok-statuses exit)
       (throw (ex-info "git error" (assoc rtn :git all-args))))
@@ -51,6 +52,9 @@
 (defn format-voom-ver
   [gver]
   (let [{:keys [ver ctime sha]} gver]
+    (assert ver   (str "format-voom-ver requires :ver " (pr-str gver)))
+    (assert ctime (str "format-voom-ver requires :ctime " (pr-str gver)))
+    (assert sha   (str "format-voom-ver requires :sha " (pr-str gver)))
     (str (s/replace ver #"-SNAPSHOT" "")
          "-" (formatted-timestamp timestamp-fmt ctime) "-g" sha)))
 
@@ -396,11 +400,11 @@
                                 (concat neg-tags [(str "origin/" found-branch) "--" found-path]))))]
         :when (seq commits)]
     (let [refs (-> commits first :refs)
+          ;; _ (pprint {:gitdir gitdir :path found-path :branch found-branch :commits commits})
           reflist (filter #(and
                             (= (str proj-name) (:proj %))
                             (= found-path (:path %))) (map parse-tag refs))]
       (some (fn [[current next-commit]]
-              #_(prn :refs path (:refs next-commit))
               (when (or (= :end next-commit)
                         (some #(= found-path (:path (parse-tag %)))
                               (:refs next-commit)))
@@ -429,7 +433,7 @@
      (do (println "\nMultiple bump resolutions for:"
                   prj (pr-str ver-spec) (pr-str voom-meta))
          (doseq [[voom-ver group] groups]
-           (prn voom-ver (map #(select-keys % [:gitdir :branch :path :ctime]) group)))
+           (prn voom-ver (map #(select-keys % [:repo :branch :path :ctime]) group)))
          dep))))
 
 (defn rewrite-project-file [input-str replacement-map]
@@ -459,7 +463,7 @@
                     (when (not= old-ver new-ver)
                       (str " -> " new-ver)))))
     (if (= old-deps desired-new-deps)
-      (println "All deps already up-to-date.")
+      (println "No versions bumped.")
       (let [replacement-map (into {} (map #(when (not= %1 %2) [%1 %2])
                                           old-deps desired-new-deps))
             tmp-file (File/createTempFile
