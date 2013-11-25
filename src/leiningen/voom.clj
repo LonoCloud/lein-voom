@@ -516,6 +516,18 @@
           :when (.contains ^String proj dep) ]
       proj)))
 
+(defn adj-path
+  ([f path] (adj-path false f path))
+  ([dir-flag f path]
+     (->
+      ;; TODO Should this be made an isDirectory check?
+      (if (and = dir-flag (.isFile ^File f))
+        (.getParentFile ^File f)
+        ^File f)
+      (.getCanonicalPath)
+      ^String (str "/" path)
+      (File.))))
+
 (defn find-box
   "Locates voom-box root starting from current working directory."
   [& args]
@@ -526,6 +538,31 @@
         (if (.exists pfile)
           path
           (recur (.getParentFile path)))))))
+
+(defn box-repo-add
+  [{:keys [gitdir branch sha proj path]}]
+  (if-let [bdir (find-box)]
+    (let [pname (-> (str proj)
+                    (s/replace #"/" "--"))
+          pdir (adj-path bdir pname)
+          checkout (adj-path bdir (str ".voom-box/" pname))]
+      (println "Found box at:" bdir pdir)
+      (if (.exists ^File checkout)
+        (git {:gitdir (adj-path checkout "/.git")}
+             "fetch")
+        (git {} "clone" gitdir
+             "--refer" gitdir
+             checkout))
+      (git {:gitdir (adj-path checkout "/.git")}
+           "checkout" sha) ; must detach head for update...
+      (git {:gitdir (adj-path checkout "/.git")}
+           "branch" "-f" branch sha)
+      (git {:gitdir (adj-path checkout "/.git")}
+           "checkout" branch)
+      (sh "rm" "-f" pdir)
+      ;; (SYMLINK WILL NEED TO BE UPDATED FOR EACH CHECKOUT)
+      (sh "ln" "-s" (adj-path checkout path) pdir))
+    (println "Can't find box")))
 
 (defn box-add
   [proj & deps]
@@ -538,7 +575,7 @@
           (println "Multiple projects / locations match" (str \" dep \"\:))
           (doseq [r repo-infos]
             (prn r)))
-        (prn "Found:" (first repo-infos))))))
+        (box-repo-add (first repo-infos))))))
 
 ;; === lein entrypoint ===
 
@@ -550,7 +587,6 @@
 (def sub-commands
   {"build-deps" build-deps
    "freshen" freshen
-   "box-add" box-add
    "retag" retag
    "new-task" nope})
 
@@ -577,6 +613,8 @@
     (cond
      (:print kargset) (println (:version @new-project))
      (:parse kargset) (prn (ver-parse (first sargs)))
+     (:find-box kargset) (prn (find-box))
+     (:box-add kargset) (apply box-add project sargs)
      :else (if-let [f (get sub-commands (first sargs))]
              (apply f @new-project (rest sargs))
              (if (and (dirty-wc? (:root @new-project))
