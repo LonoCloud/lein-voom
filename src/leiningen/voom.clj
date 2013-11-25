@@ -1,5 +1,5 @@
 (ns leiningen.voom
-  (:require [clojure.java.shell :refer [sh]]
+  (:require [clojure.java.shell :as shell]
             [clojure.string :as s]
             [clojure.pprint :refer [pprint]]
             [clojure.java.io :as io]
@@ -13,6 +13,13 @@
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
+
+(defn sh
+  [& cmdline]
+  (apply shell/sh (map #(if (= File (class %))
+                          (.getPath ^File %)
+                          %)
+                       cmdline)))
 
 (defn git
   [{:keys [^File gitdir ok-statuses]
