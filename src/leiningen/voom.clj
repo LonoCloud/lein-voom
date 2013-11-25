@@ -379,6 +379,14 @@
    (update-in [:path] (fnil s/replace "") #"%" "/")
    (update-in [:proj] (fnil s/replace "") #"%" "/")))
 
+(defn origin-branches
+  [gitdir]
+  (->> (git {:gitdir gitdir} "rev-parse"
+            "--symbolic-full-name" "--remotes=origin/")
+       :lines
+       (map #(re-find #"[^/]+$" %))
+       distinct))
+
 (defn newest-voom-ver-by-spec
   [proj-name ver-spec {:keys [repo branch path]}]
 
@@ -395,8 +403,7 @@
               paths (set (map :path tspecs))]
         found-path paths
         :when (or (= found-path path) (nil? path))
-        found-branch (map #(.getName ^File %)
-                          (glob (str gitdir "/refs/remotes/origin/*")))
+        found-branch (origin-branches gitdir)
         :when (or (= found-branch branch) (nil? branch))
         :let [tags-with-parents (remove #(.endsWith ^String % "--no-parent") tags)
               neg-tags (map #(str "^" % "^") tags-with-parents)
