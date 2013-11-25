@@ -321,7 +321,7 @@
 (defn project-change-shas
   [gitdir]
   (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H,%cd,%d"
-            "--name-status" "--" "project.clj" "**/project.clj")
+            "--name-status" "-m" "--" "project.clj" "**/project.clj")
        :lines
        (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
                 {:op op :path path}
@@ -339,7 +339,7 @@
   [gitdir]
   (let [proj-shas (project-change-shas gitdir)]
     (doseq [{:keys [sha refs ops]} (report-progress gitdir proj-shas)
-            :while (not-any? #(.startsWith ^String % "tag: voom-") refs)
+            :when (not-any? #(.startsWith ^String % "tag: voom-") refs)
             {:keys [op path]} ops]
       (when-let [p (and (not= "D" op)
                         (robust-read-project gitdir sha path))]
