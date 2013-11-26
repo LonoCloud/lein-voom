@@ -358,9 +358,14 @@
 
 (defn tag-repo-projects
   [gitdir]
-  (let [proj-shas (project-change-shas gitdir)]
-    (doseq [{:keys [sha refs parents ops]} (report-progress gitdir proj-shas)
-            :when (not-any? #(.startsWith ^String % "tag: voom-") refs)
+  (let [branches (origin-branches gitdir)
+        proj-shas (apply project-change-shas gitdir
+                         "--not" "--tags=voom-branch--*"
+                         (map #(str #_double-negative--> "^origin/" %) branches))]
+
+    ;; add missing voom-- tags
+    (doseq [:when (seq proj-shas)
+            {:keys [sha refs parents ops]} (report-progress gitdir proj-shas)
             {:keys [op path]} ops]
       (when-let [p (and (not= "D" op)
                         (robust-read-project gitdir sha path))]
@@ -371,7 +376,13 @@
                                     (subs sha 0 7)]
                                    (cond-> (empty? parents)
                                      (conj "no-parent"))))]
-          (git {:gitdir gitdir} "tag" "-f" tag sha))))))
+          (git {:gitdir gitdir} "tag" "-f" tag sha))))
+
+    ;; TODO: clean up abandoned voom-- and voom-branch-- tags
+    ;; Update all voom-branch-- tags
+    (doseq [branch branches]
+      (let [tag (str "voom-branch--" branch)]
+        (git {:gitdir gitdir} "tag" "-f" tag (str "origin/" branch))))))
 
 (defn clear-voom-tags
   [gitdir]

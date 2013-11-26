@@ -25,3 +25,5 @@ For now -- put all these in a single lein plugin? lein voom task-add, etc? ...ex
 
 TODO:
 - Handle history rewrites (clear local tags that no longer make sense?  etc.)
+- Use version ranges for freshen specs, instead of blog matching
+- Warn about available versions better than allowed by freshen spec
