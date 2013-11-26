@@ -385,8 +385,8 @@
   [tag]
   (->
    (zipmap [:prefix :proj :ver :path :sha :no-parent] (s/split tag #"--"))
-   (update-in [:path] (fnil s/replace "") #"%" "/")
-   (update-in [:proj] (fnil s/replace "") #"%" "/")))
+   (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
+   (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
 (defn origin-branches
   [gitdir]
