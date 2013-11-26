@@ -302,6 +302,14 @@
         (println "Ignoring error:" (pr-str e)))
       nil)))
 
+(defn origin-branches
+  [gitdir]
+  (->> (git {:gitdir gitdir} "rev-parse"
+            "--symbolic-full-name" "--remotes=origin/")
+       :lines
+       (map #(re-find #"[^/]+$" %))
+       distinct))
+
 (defn report-progress
   "Eagerly consume xs, but return a lazy seq that reports progress
   every half second as the returned seq is consumed."
@@ -387,14 +395,6 @@
    (zipmap [:prefix :proj :ver :path :sha :no-parent] (s/split tag #"--"))
    (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
-
-(defn origin-branches
-  [gitdir]
-  (->> (git {:gitdir gitdir} "rev-parse"
-            "--symbolic-full-name" "--remotes=origin/")
-       :lines
-       (map #(re-find #"[^/]+$" %))
-       distinct))
 
 (defn newest-voom-ver-by-spec
   [proj-name ver-spec {:keys [repo branch path]}]
