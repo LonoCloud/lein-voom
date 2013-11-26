@@ -338,9 +338,9 @@
     {:sha sha, :ctime (Date. ^String datestr), :parents parents, :refs refs}))
 
 (defn project-change-shas
-  [gitdir]
-  (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H,%cd,%p,%d"
-            "--name-status" "-m")
+  [gitdir & opts]
+  (->> (apply git {:gitdir gitdir} "log" "--pretty=format:%H,%cd,%p,%d"
+              "--name-status" "-m" opts)
        :lines
        (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
                 (when (re-find #"(^|/)project\.clj$" path)
