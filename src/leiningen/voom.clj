@@ -144,7 +144,8 @@
 (defn fetch-all
   [dirs]
   (doseq [^File d dirs]
-    (println "Fetching:" (.getPath d))
+    (print (str "Fetching: " (.getPath d) "\n"))
+    (flush)
     (git {:gitdir d} "fetch")))
 
 (defn find-project
@@ -384,6 +385,17 @@
       (let [tag (str "voom-branch--" branch)]
         (git {:gitdir gitdir} "tag" "-f" tag (str "origin/" branch))))))
 
+(defn tag-all-repos
+  [& {:keys [fetch]}]
+  (->> (all-repos-dirs)
+       (map #(future
+               (when fetch
+                 (fetch-all [%]))
+               (tag-repo-projects %)))
+       doall
+       (map deref)
+       dorun))
+
 (defn clear-voom-tags
   [gitdir]
   (let [tags (->> (git {:gitdir gitdir} "tag" "--list" "voom-*")
@@ -490,6 +502,7 @@
           replacement-map))
 
 (defn freshen [project & args]
+  (tag-all-repos :fetch true)
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
         desired-new-deps (doall (map #(fresh-version %) old-deps))]
@@ -579,6 +592,7 @@
 
 (defn box-add
   [proj & deps]
+  (tag-all-repos)
   (doseq [dep deps]
     (let [full-projs (resolve-short-proj (name dep))
           full-projs (map symbol full-projs)
