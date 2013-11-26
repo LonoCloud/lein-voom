@@ -326,7 +326,7 @@
   (let [[sha datestr parents refstr] (vec (.split #"," s 4))
         refs (when refstr
                (when-let [[_ x] (re-find #"\((.*)\)" refstr)]
-                 (vec (.split #",\s+" x))))]
+                 (mapv #(s/replace % #"^tag: " "") (.split #",\s+" x))))]
     {:sha sha, :ctime (Date. ^String datestr), :parents parents, :refs refs}))
 
 (defn project-change-shas
