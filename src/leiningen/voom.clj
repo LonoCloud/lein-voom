@@ -332,10 +332,11 @@
 (defn project-change-shas
   [gitdir]
   (->> (git {:gitdir gitdir} "log" "--all" "--pretty=format:%H,%cd,%p,%d"
-            "--name-status" "-m" "--" "project.clj" "**/project.clj")
+            "--name-status" "-m")
        :lines
        (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
-                {:op op :path path}
+                (when (re-find #"(^|/)project\.clj$" path)
+                  {:op op :path path})
                 (when (seq %)
                   (parse-sha-refs %))))
        (#(concat % [{:sha "end sigil"}]))
@@ -344,7 +345,8 @@
                        [entry partial]
                        [(update-in partial [:ops] (fnil conj []) entry) nil]))
                    [nil nil])
-       (keep second)))
+       (keep second)
+       (filter :ops)))
 
 (defn tag-repo-projects
   [gitdir]
