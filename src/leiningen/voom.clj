@@ -1,7 +1,7 @@
 (ns leiningen.voom
   (:require [clojure.java.shell :as shell]
             [clojure.string :as s]
-            [clojure.pprint :refer [pprint]]
+            [clojure.pprint :refer [pprint print-table]]
             [clojure.java.io :as io]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
@@ -464,6 +464,18 @@
                  :branch found-branch}))
             (partition 2 1 (concat commits [:end]))))))
 
+(defn print-repo-infos
+  [repo-infos]
+  (->> repo-infos
+       (map (fn [info]
+              (-> info
+                  (dissoc :gitdir)
+                  (assoc :repo (-> (remotes (:gitdir info)) :origin :fetch))
+                  (update-in [:sha] #(subs (str % "--------") 0 7)))))
+       (sort-by :ctime)
+       (print-table [:repo :proj :ver :branch :path :ctime :sha]))
+  (newline))
+
 (defn fresh-version [[prj ver :as dep]]
   (let [voom-meta (:voom (meta dep))
         ver-spec (or (:version voom-meta)
@@ -476,12 +488,9 @@
      0 (do (println "No matching version found for" prj (pr-str ver-spec))
            dep)
      1 (assoc dep 1 (key (first groups)))
-     (do (println "\nMultiple bump resolutions for:"
-                  prj (pr-str ver-spec) (pr-str voom-meta))
-         (doseq [[voom-ver group] groups]
-           (prn voom-ver (map #(assoc (select-keys % [:branch :path :ctime])
-                                 :repo (-> (remotes (:gitdir %)) :origin :fetch))
-                              group)))
+     (do (print "\nMultiple bump resolutions for:"
+                prj (pr-str ver-spec) (pr-str voom-meta))
+         (print-repo-infos (map #(first (val %)) groups))
          dep))))
 
 (defn rewrite-project-file [input-str replacement-map]
@@ -599,9 +608,8 @@
           repo-infos (mapcat #(newest-voom-ver-by-spec % "" {}) full-projs)]
       (if (< 1 (count repo-infos))
         (do
-          (println "Multiple projects / locations match" (str \" dep \"\:))
-          (doseq [r repo-infos]
-            (prn r)))
+          (print "Multiple projects / locations match" (str \" dep \"\:))
+          (print-repo-infos repo-infos))
         (box-repo-add (first repo-infos))))))
 
 ;; === lein entrypoint ===
