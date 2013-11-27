@@ -4,6 +4,7 @@
             [clojure.pprint :refer [pprint print-table]]
             [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.edn :as edn]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [org.satta.glob :refer [glob]]
@@ -421,13 +422,13 @@
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
 (defn newest-voom-ver-by-spec
-  [proj-name ver-spec {:keys [repo branch path]}]
+  [proj-name {:keys [version repo branch path]}]
 
   (for [gitdir (all-repos-dirs)
         :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
         :let [ptn (s/join "--" ["voom"
                                 (str (namespace proj-name) "%" (name proj-name))
-                                (str ver-spec "*")])
+                                (str (or version "") "*")])
               tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
               tspecs (if (= tags [""])
                        []
@@ -609,18 +610,30 @@
       (sh "ln" "-s" (adj-path checkout path) pdir))
     (println "Can't find box")))
 
+(defn fold-args-as-meta
+  [adeps]
+  (loop [deps [] [fdep & rdeps] adeps]
+    (if (seq rdeps)
+      (if (map? fdep)
+        (let [[ndep & rdeps] rdeps]
+          (recur (conj deps (with-meta ndep fdep)) rdeps))
+        (recur (conj deps fdep) rdeps))
+      deps)))
+
 (defn box-add
-  [proj & deps]
+  [proj & adeps]
   (tag-all-repos)
-  (doseq [dep deps]
-    (let [full-projs (resolve-short-proj (name dep))
-          full-projs (map symbol full-projs)
-          repo-infos (mapcat #(newest-voom-ver-by-spec % "" {}) full-projs)]
-      (if (< 1 (count repo-infos))
-        (do
-          (print "Multiple projects / locations match" (str \" dep \"\:))
-          (print-repo-infos repo-infos))
-        (box-repo-add (first repo-infos))))))
+  (doseq [:let [deps (fold-args-as-meta adeps)]
+          dep deps
+          :let [full-projs (resolve-short-proj (pr-str dep))
+                full-projs (map symbol full-projs)
+                repo-infos (mapcat #(newest-voom-ver-by-spec % (meta dep)) full-projs)]]
+    (case (count repo-infos)
+      0 (throw (ex-info "Could not find matching projects" {:dep dep}))
+      1 (box-repo-add (first repo-infos))
+      (do
+        (print "Multiple projects / locations match" (str \" dep \"\:))
+        (print-repo-infos repo-infos)))))
 
 ;; === lein entrypoint ===
 
@@ -650,8 +663,9 @@
     lein voom [:long-sha] :print
     lein voom :parse <version-str>"
   [project & args]
-  (let [[kstrs sargs] (split-with #(.startsWith ^String % ":") args)
-        kargset (set (map #(keyword (subs % 1)) kstrs))
+  (let [symargs (map edn/read-string args)
+        [kargs sargs] (split-with keyword? symargs)
+        kargset (set kargs)
         long-sha (kargset :long-sha)
         new-project (delay (update-proj-version project long-sha))]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
