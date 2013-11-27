@@ -612,12 +612,15 @@
 
 (defn fold-args-as-meta
   [adeps]
+  ;; TODO better handle malformed commandlines for error reporting
   (loop [deps [] [fdep & rdeps] adeps]
-    (if (seq rdeps)
-      (if (map? fdep)
-        (let [[ndep & rdeps] rdeps]
-          (recur (conj deps (with-meta ndep fdep)) rdeps))
-        (recur (conj deps fdep) rdeps))
+    (if fdep
+      (if (seq rdeps)
+        (if (map? fdep)
+          (let [[ndep & rdeps] rdeps]
+            (recur (conj deps (with-meta ndep fdep)) rdeps))
+          (recur (conj deps fdep) rdeps))
+        (conj deps fdep))
       deps)))
 
 (defn box-add
