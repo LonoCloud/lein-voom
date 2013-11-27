@@ -429,7 +429,6 @@
                                 (str (namespace proj-name) "%" (name proj-name))
                                 (str ver-spec "*")])
               tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
-              ;;_ (prn :tags tags)
               tspecs (if (= tags [""])
                        []
                        (map parse-tag tags))
@@ -453,7 +452,6 @@
                                 (concat neg-tags [(str "origin/" found-branch) "--" found-path]))))]
         :when (seq commits)]
     (let [refs (-> commits first :refs)
-          ;; _ (pprint {:gitdir gitdir :path found-path :branch found-branch :commits commits})
           reflist (filter #(and
                             (= (str proj-name) (:proj %))
                             (= found-path (:path %))) (map parse-tag refs))]
