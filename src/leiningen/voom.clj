@@ -453,7 +453,11 @@
                             (= found-path (:path %))) (map parse-tag refs))]
       (some (fn [[current next-commit]]
               (when (or (= :end next-commit)
-                        (some #(= found-path (:path (parse-tag %)))
+                        (some #(let [t (parse-tag %)]
+                                 (and
+                                  (= "voom" (:prefix t))
+                                  (= (str proj-name) (:proj t))
+                                  (= found-path (:path t))))
                               (:refs next-commit)))
                 {:sha (:sha current)
                  :ctime (:ctime current)
