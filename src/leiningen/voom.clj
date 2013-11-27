@@ -459,13 +459,15 @@
                                   (= (str proj-name) (:proj t))
                                   (= found-path (:path t))))
                               (:refs next-commit)))
-                {:sha (:sha current)
-                 :ctime (:ctime current)
-                 :ver (-> reflist first :ver)
-                 :path found-path
-                 :proj proj-name
-                 :gitdir gitdir
-                 :branch found-branch}))
+                (let [ver (-> reflist first :ver)]
+                  (assert (not= nil ver) "Failed to find version for commit.")
+                  {:sha (:sha current)
+                   :ctime (:ctime current)
+                   :ver ver
+                   :path found-path
+                   :proj proj-name
+                   :gitdir gitdir
+                   :branch found-branch})))
             (partition 2 1 (concat commits [:end]))))))
 
 (defn print-repo-infos
