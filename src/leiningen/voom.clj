@@ -656,6 +656,7 @@
      (:parse kargset) (prn (ver-parse (first sargs)))
      (:find-box kargset) (prn (find-box))
      (:box-add kargset) (apply box-add project sargs)
+     (:retag-all-repos kargset) (time (doall (mapcat (juxt clear-voom-tags tag-repo-projects) (all-repos-dirs))))
      :else (if-let [f (get sub-commands (first sargs))]
              (apply f @new-project (rest sargs))
              (if (and (dirty-wc? (:root @new-project))
