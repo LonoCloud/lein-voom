@@ -97,7 +97,7 @@
 
 ;; === manage REPOS_HOME directory ===
 
-(def task-dir "/.voom")
+(def task-dir "/.voom-box")
 
 (def repos-home (or (System/getenv "REPOS_HOME")
                     (str (System/getProperty "user.home")
