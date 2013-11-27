@@ -592,11 +592,10 @@
                     (s/replace #"/" "--"))
           pdir (adj-path bdir pname)
           checkout (adj-path bdir (str ".voom-box/" pname))]
-      (println "Found box at:" bdir pdir)
       (if (.exists ^File checkout)
         (git {:gitdir (adj-path checkout "/.git")}
              "fetch")
-        (git {} "clone" gitdir
+        (git {} "clone" (-> (remotes gitdir) :origin :fetch)
              "--refer" gitdir
              checkout))
       (git {:gitdir (adj-path checkout "/.git")}
