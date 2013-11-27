@@ -387,13 +387,12 @@
       (let [tag (str "voom-branch--" branch)]
         (git {:gitdir gitdir} "tag" "-f" tag (str "origin/" branch))))))
 
-(defn tag-all-repos
-  [& {:keys [fetch]}]
+(defn p-repos
+  "Call f once for each repo dir, in parallel. When all calls are
+  done, return nil."
+  [f]
   (->> (all-repos-dirs)
-       (map #(future
-               (when fetch
-                 (fetch-all [%]))
-               (tag-repo-projects %)))
+       (map #(future (f %)))
        doall
        (map deref)
        dorun))
@@ -406,13 +405,6 @@
     (when (seq tags)
       (apply git {:gitdir gitdir} "tag" "--delete" tags)
       nil)))
-
-(defn retag
-  "Clear and retag all repos in .voom-repos"
-  [project & args]
-  (doseq [gitdir (all-repos-dirs)]
-    (clear-voom-tags gitdir)
-    (tag-repo-projects gitdir)))
 
 (defn parse-tag
   [tag]
@@ -491,7 +483,7 @@
   (let [voom-meta (:voom (meta dep))
         ver-spec (or (:version voom-meta)
                      (re-find #"^[^.]+." ver))
-        groups (->> (newest-voom-ver-by-spec prj ver-spec voom-meta)
+        groups (->> (newest-voom-ver-by-spec prj (assoc voom-meta :version ver-spec))
                     (map #(assoc % :voom-ver (format-voom-ver
                                               (update-in % [:sha] subs 0 7))))
                     (group-by :voom-ver))]
@@ -522,7 +514,7 @@
           replacement-map))
 
 (defn freshen [project & args]
-  (tag-all-repos :fetch true)
+  (p-repos (fn [p] (fetch-all [p]) (tag-repo-projects p)))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
         desired-new-deps (doall (map #(fresh-version %) old-deps))]
@@ -624,7 +616,7 @@
 
 (defn box-add
   [proj & adeps]
-  (tag-all-repos)
+  (p-repos (fn [p] (tag-repo-projects p)))
   (doseq [:let [deps (fold-args-as-meta adeps)]
           dep deps
           :let [full-projs (resolve-short-proj (pr-str dep))
@@ -644,12 +636,6 @@
 
 ;; TODO: Consider revamping these entry points. Separate top-level
 ;; lein commands?  Separate lein plugins?
-(def sub-commands
-  {"build-deps" build-deps
-   "freshen" freshen
-   "retag" retag
-   "new-task" nope})
-
 (defn ^:no-project-needed voom
   "Usage:
     lein voom [flags] [lein command ...]
@@ -665,21 +651,21 @@
     lein voom [:long-sha] :print
     lein voom :parse <version-str>"
   [project & args]
-  (let [symargs (map edn/read-string args)
-        [kargs sargs] (split-with keyword? symargs)
-        kargset (set kargs)
+  (let [[kw-like more-args] (split-with #(re-find #"^:" %) args)
+        kargset (set (map edn/read-string kw-like))
+        sargs (map edn/read-string more-args)
         long-sha (kargset :long-sha)
         new-project (delay (update-proj-version project long-sha))]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
     (cond
      (:print kargset) (println (:version @new-project))
-     (:parse kargset) (prn (ver-parse (first sargs)))
+     (:parse kargset) (prn (ver-parse (first more-args)))
      (:find-box kargset) (prn (find-box))
-     (:box-add kargset) (apply box-add project sargs)
-     (:retag-all-repos kargset) (time (doall (mapcat (juxt clear-voom-tags tag-repo-projects) (all-repos-dirs))))
-     :else (if-let [f (get sub-commands (first sargs))]
-             (apply f @new-project (rest sargs))
-             (if (and (dirty-wc? (:root @new-project))
-                      (not (:insanely-allow-dirty-working-copy kargset)))
-               (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
-               (lmain/resolve-and-apply @new-project sargs))))))
+     (:box-add kargset) (apply box-add project (map edn/read-string more-args))
+     (:retag-all-repos kargset) (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p))))
+     (:freshen kargset) (freshen project)
+     (:build-deps kargset) (build-deps project)
+     :else (if (and (dirty-wc? (:root @new-project))
+                    (not (:insanely-allow-dirty-working-copy kargset)))
+             (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
+             (lmain/resolve-and-apply @new-project more-args)))))
