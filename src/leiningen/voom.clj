@@ -3,6 +3,7 @@
             [clojure.string :as s]
             [clojure.pprint :refer [pprint print-table]]
             [clojure.java.io :as io]
+            [clojure.set :as set]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [org.satta.glob :refer [glob]]
@@ -427,7 +428,7 @@
         :let [ptn (s/join "--" ["voom"
                                 (str (namespace proj-name) "%" (name proj-name))
                                 (str ver-spec "*")])
-              tags (:lines (git {:gitdir gitdir} "tag" "--list" ptn))
+              tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
               ;;_ (prn :tags tags)
               tspecs (if (= tags [""])
                        []
@@ -437,8 +438,13 @@
         :when (or (= found-path path) (nil? path))
         found-branch (origin-branches gitdir)
         :when (or (= found-branch branch) (nil? branch))
-        :let [tags-with-parents (remove #(.endsWith ^String % "--no-parent") tags)
-              neg-tags (map #(str "^" % "^") tags-with-parents)
+        :let [not-not-tags (set (mapcat #(:refs (parse-sha-refs %))
+                                        (:lines (git {:gitdir gitdir} "log" "--pretty=format:%H,%cd,%p,%d" "--all"
+                                                     "--simplify-by-decoration" "-m" (str "^origin/" found-branch)))))
+              yes-yes-tags (set/difference tags not-not-tags)
+              tags-with-parents (remove #(.endsWith ^String % "--no-parent") yes-yes-tags)
+              tags-here-with-parents (filter #(= found-path (:path (parse-tag %))) tags-with-parents)
+              neg-tags (map #(str "^" % "^") tags-here-with-parents)
               commits
               , (map
                  parse-sha-refs
