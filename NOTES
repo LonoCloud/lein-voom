@@ -27,3 +27,19 @@ TODO:
 - Handle history rewrites (clear local tags that no longer make sense?  etc.)
 - Use version ranges for freshen specs, instead of blog matching
 - Warn about available versions better than allowed by freshen spec
+
+Search:
+-------
+
+Searching proj-name across all repos possibly constrained by version, repo, branch or path
+
+
+
+NEEDS:
+
+- documentation (refresh/more)
+- have voom versions for dependencies and build/install
+- must have freshen ability
+- should have basic box construction
+- should have transitive bumping in boxes
+- should have auto bumping so
