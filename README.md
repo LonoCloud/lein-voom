@@ -184,6 +184,8 @@ new version that other projects can reliably depend upon.
   include deps that aren't available for download anywhere (may be
   partially mitigated by a plugin dep).
 
+- Using `build-deps` guarantees a partiuclar artifact is built from the same sources, but not necessarily using the same tools or in the same environment.  Therefore there may still be differences between artifacts built in different environments, even if they have identical version strings.
+
 - Long, strange-looking version numbers may confuse some users
 
 - Currently supports only git repos
