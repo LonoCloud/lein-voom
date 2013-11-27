@@ -422,13 +422,13 @@
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
 (defn newest-voom-ver-by-spec
-  [proj-name {:keys [version repo branch path]}]
-
+  [proj-name {:keys [version repo branch path]
+              :or {version ""}}]
   (for [gitdir (all-repos-dirs)
         :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
         :let [ptn (s/join "--" ["voom"
                                 (str (namespace proj-name) "%" (name proj-name))
-                                (str (or version "") "*")])
+                                (str version "*")])
               tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
               tspecs (if (= tags [""])
                        []
