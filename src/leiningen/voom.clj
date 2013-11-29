@@ -586,19 +586,15 @@
     (let [pname (-> (str proj)
                     (s/replace #"/" "--"))
           pdir (adj-path bdir pname)
-          checkout (adj-path bdir (str ".voom-box/" pname))]
+          checkout (adj-path bdir (str ".voom-box/" pname))
+          g {:gitdir (adj-path checkout "/.git")}
+          remote (-> (remotes gitdir) :origin :fetch)]
       (if (.exists ^File checkout)
-        (git {:gitdir (adj-path checkout "/.git")}
-             "fetch")
-        (git {} "clone" (-> (remotes gitdir) :origin :fetch)
-             "--refer" gitdir
-             checkout))
-      (git {:gitdir (adj-path checkout "/.git")}
-           "checkout" sha) ; must detach head for update...
-      (git {:gitdir (adj-path checkout "/.git")}
-           "branch" "-f" branch sha)
-      (git {:gitdir (adj-path checkout "/.git")}
-           "checkout" branch)
+        (git g "fetch")
+        (git {} "clone" remote "--refer" gitdir checkout))
+      (git g "checkout" sha) ; must detach head for update...
+      (git g "branch" "-f" branch sha)
+      (git g "checkout" branch)
       (sh "rm" "-f" pdir)
       ;; (SYMLINK WILL NEED TO BE UPDATED FOR EACH CHECKOUT)
       (sh "ln" "-s" (adj-path checkout path) pdir))
