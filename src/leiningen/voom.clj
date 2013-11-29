@@ -33,7 +33,10 @@
                     (str "--work-tree=" (.getParent gitdir))])
         all-args (concat dir-args subcmd)
         ;; _ (prn :calling (doall (cons 'git all-args)))
-        {:keys [exit] :as rtn} (apply sh "git" all-args)]
+        {:keys [exit] :as rtn} (apply sh "git" all-args)
+        rtn (assoc rtn :bool (if (zero? (:exit rtn))
+                               true
+                               false))]
     (when-not (ok-statuses exit)
       (throw (ex-info "git error" (assoc rtn :git all-args))))
     (assoc rtn :lines (when (not= "\n" (:out rtn))
