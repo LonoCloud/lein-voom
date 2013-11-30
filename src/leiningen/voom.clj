@@ -29,7 +29,7 @@
   ;; We won't handle bare repos or displaced worktrees
   (let [cmd-args (if (nil? gitdir)
                    []
-                   [:dir (.getParent gitdir)])
+                   [:dir gitdir])
         all-args (concat subcmd cmd-args)
         ;; _ (prn :calling (doall (cons 'git all-args)))
         {:keys [exit] :as rtn} (apply sh "git" all-args)
@@ -143,7 +143,7 @@
          d)))
 
 (defn all-repos-dirs []
-  (glob (str (s/replace repos-home #"/$" "") "/*/.git")))
+  (glob (str (s/replace repos-home #"/$" "") "/*")))
 
 (defn fetch-all
   [dirs]
@@ -586,7 +586,7 @@
                     (s/replace #"/" "--"))
           pdir (adj-path bdir pname)
           checkout (adj-path bdir (str ".voom-box/" pname))
-          g {:gitdir (adj-path checkout "/.git")}
+          g {:gitdir checkout}
           remote (-> (remotes gitdir) :origin :fetch)]
       (if (.exists ^File checkout)
         (git g "fetch")
