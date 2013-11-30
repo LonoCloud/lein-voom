@@ -617,6 +617,14 @@
           checkout (adj-path bdir (str ".voom-box/" pname))
           g {:gitdir checkout}
           remote (-> (remotes gitdir) :origin :fetch)]
+      (when (and (.exists ^File checkout)
+                 (not= remote (-> (remotes (:gitdir g)) :origin :fetch)))
+        (if-let [dirty (dirty-repo? (:gitdir g))]
+          (do (println "Must clean up repo:" pdir)
+              (prn dirty)
+              (lmain/abort "Please fix."))
+          (do (sh "rm" "-f" pdir)
+              (sh "rm" "-rf" checkout))))
       (if (.exists ^File checkout)
         (git g "fetch")
         (git {} "clone" remote "--refer" gitdir checkout))
