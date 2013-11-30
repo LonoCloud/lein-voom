@@ -27,11 +27,10 @@
   [{:keys [^File gitdir ok-statuses]
     :or {ok-statuses #{0}}} & subcmd]
   ;; We won't handle bare repos or displaced worktrees
-  (let [dir-args (if (nil? gitdir)
+  (let [cmd-args (if (nil? gitdir)
                    []
-                   [(str "--git-dir=" (.getPath gitdir))
-                    (str "--work-tree=" (.getParent gitdir))])
-        all-args (concat dir-args subcmd)
+                   [:dir (.getParent gitdir)])
+        all-args (concat subcmd cmd-args)
         ;; _ (prn :calling (doall (cons 'git all-args)))
         {:keys [exit] :as rtn} (apply sh "git" all-args)
         rtn (assoc rtn :bool (if (zero? (:exit rtn))
