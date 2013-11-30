@@ -117,6 +117,35 @@
    {}
    (:lines (git {:gitdir gitdir} "remote" "-v"))))
 
+(defn ancestor?
+  [gitdir old new]
+  (:bool (git {:gitdir gitdir :ok-statuses #{0 1}}
+                   "merge-base" "--is-ancestor" old new)))
+
+(defn dirty-repo?
+  [gitdir]
+  (let [g {:gitdir gitdir}
+        dirty (:lines (git g "status" "--short"))
+        stashes (:lines (git g "stash" "list"))
+        remotes (->> (git g "ls-remote")
+                     :lines
+                     next
+                     (map #(first (s/split % #"\t" 2)))
+                     set)
+        local-refs (filter (complement #{"refs/stash"})
+                           (:lines (git g "rev-parse" "--symbolic" "--all")))
+        local-shas (:lines (apply git g "rev-parse" local-refs))
+        locals (zipmap local-refs local-shas)
+        unpushed-local-refs (map key (filter #(not (remotes (val %))) locals))
+        local-commits (filter #(not (some (partial ancestor? gitdir %)
+                                          remotes))
+                              unpushed-local-refs)]
+    (if (empty? (concat dirty stashes local-commits))
+      false
+      {:dirty-files dirty
+       :stashes stashes
+       :local-commits local-commits})))
+
 (defn with-log-level [level f]
   (let [handlers (doall (.getHandlers (Logger/getLogger "")))
         old-levels (doall (map #(.getLevel ^Handler %) handlers))
