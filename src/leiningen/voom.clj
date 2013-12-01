@@ -666,8 +666,6 @@
 
 ;; === lein entrypoint ===
 
-(defn nope [& args]
-  (println "That voom sub-comand is not yet implemented."))
 
 ;; TODO: Consider revamping these entry points. Separate top-level
 ;; lein commands?  Separate lein plugins?
