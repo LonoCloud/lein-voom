@@ -17,36 +17,26 @@
 # For the above reasons, we can use set -x no matter how much we would
 # like to. (It will call the calling context to exit.)
 
-function box_git {
-    local d=$1
-    shift
-    git --git-dir="$d"/.git --work-tree="$d" "$@"
+function run_box_job {
+    local tdir=$(mktemp -d)
+    local ififo="${tdir}/voom-box-fifo-in"
+    local ofifo="${tdir}/voom-box-fifo-out"
+    mkfifo -m 600 "$ififo"
+    mkfifo -m 600 "$ofifo"
+
+    lein voom :box "$PWD" "$ofifo" "$ififo" "$@" &
+
+    echo "X" > "$ofifo" # prime the pump
+    while read x; do
+        eval "$x"
+        echo "$?" > "$ofifo"
+    done < "$ififo"
+    echo "0" > "$ofifo"
+
+    rm "$ififo" "$ofifo"
+    rmdir "$tdir"
+    fg %- >/dev/null # silences job control output
 }
 
-function box_find_project {
-    local prj=$1
-    local r
-    local p
-    local found
-    local alts
-    for r in ~/.voom-repos/*; do
-        for p in $(box_git "$r" ls-files project.clj \*\*/project.clj); do
-            if box_git "$r" show HEAD:"$p" |egrep -q "^\(defproject +($prj|$prj/$prj) "; then
-                found=$(box_git "$r" show HEAD:"$p" |egrep -o "^\(defproject .*${prj}.*" |awk '{print $2}')
-                break 2
-            elif box_git "$r" show HEAD:"$p" |egrep -q "^\(defproject .*$prj.*"; then
-                local s=$(box_git "$r" show HEAD:"$p" |egrep -o "^\(defproject .*${prj}.*" |awk '{print $2}')
-                alts="${alts}\n$prj may be $s in $(basename $r) .. $p"
-            fi
-        done
-    done
-    if [ -n "$found" ]; then
-        echo "Found $found in $r ..  $p"
-    elif [ -n "$alts" ]; then
-        echo -e "$alts"
-    else
-        echo "Couldn't find $prj"
-    fi
-}
-
-box_find_project "$@"
+# TODO: signal/exit handler to kill background process
+run_box_job "$@"

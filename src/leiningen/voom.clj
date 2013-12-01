@@ -10,11 +10,15 @@
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [java.util Date]
-           [java.io File]
+           [java.io File FileInputStream FileOutputStream OutputStreamWriter]
            [java.util.logging Logger Handler Level]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
+
+(def ^:dynamic ^FileInputStream *ififo* nil)
+(def ^:dynamic ^OutputStreamWriter *ofifo* nil)
+(def ^:dynamic ^File *pwd* nil)
 
 (defn sh
   [& cmdline]
@@ -22,6 +26,19 @@
                           (.getPath ^File %)
                           %)
                        cmdline)))
+
+(defn fcmd
+  [cmd]
+  (if (and *ififo* *ofifo*)
+    (do
+      (binding [*out* *ofifo*]
+        (println cmd)
+        (.flush *out*))
+      (let [b (byte-array 5)]
+        (while (= -1 (.read *ififo* b))
+          (Thread/sleep 1))
+        (-> b String. s/trim Integer/parseInt)))
+    -1))
 
 (defn git
   [{:keys [^File gitdir ok-statuses]
@@ -624,6 +641,8 @@
               (prn dirty)
               (lmain/abort "Please fix."))
           (do (sh "rm" "-f" pdir)
+              ;; TODO: change directory out of checkout directory and back.
+              #_(fcmd "cd 'somewhere/outside/of/checkout'")
               (sh "rm" "-rf" checkout))))
       (if (.exists ^File checkout)
         (git g "fetch")
@@ -664,8 +683,22 @@
         (print "Multiple projects / locations match" (str \" dep \"\:))
         (print-repo-infos repo-infos)))))
 
-;; === lein entrypoint ===
+(declare voom)
+(defn box
+  [proj & args]
+  (let [[^String pwd ^String ififo ^String ofifo & rargs] args
+        fpwd (File. pwd)
+        fofifo (future (-> ofifo FileOutputStream. OutputStreamWriter.))
+        fififo (future (-> ififo FileInputStream.))]
+    (binding [*pwd* fpwd
+              *ofifo* @fofifo
+              *ififo* @fififo]
+      (.read *ififo* (byte-array 5))
+      (apply voom proj rargs)
+      ;; TODO formalize break/exit handling
+      (fcmd "break"))))
 
+;; === lein entrypoint ===
 
 ;; TODO: Consider revamping these entry points. Separate top-level
 ;; lein commands?  Separate lein plugins?
@@ -694,6 +727,7 @@
      (:print kargset) (println (:version @new-project))
      (:parse kargset) (prn (ver-parse (first more-args)))
      (:find-box kargset) (prn (find-box))
+     (:box kargset) (apply box project more-args)
      (:box-add kargset) (apply box-add project (map edn/read-string more-args))
      (:retag-all-repos kargset) (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p))))
      (:freshen kargset) (freshen project)
