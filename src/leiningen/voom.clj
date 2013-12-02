@@ -478,13 +478,18 @@
         :when (or (= found-path path) (nil? path))
         found-branch (origin-branches gitdir)
         :when (or (= found-branch branch) (nil? branch))
-        :let [not-not-tags (set (mapcat #(:refs (parse-sha-refs %))
+        :let [;; All the tags NOT accessible via this branch (we will exclude them):
+              not-not-tags (set (mapcat #(:refs (parse-sha-refs %))
                                         (:lines (git {:gitdir gitdir} "log" "--pretty=format:%H,%cd,%p,%d" "--all"
                                                      "--simplify-by-decoration" "-m" (str "^origin/" found-branch)))))
+              ;; yes-yes-tags are the matching tags reachable via this branch:
               yes-yes-tags (set/difference tags not-not-tags)
               tags-with-parents (remove #(.endsWith ^String % "--no-parent") yes-yes-tags)
               tags-here-with-parents (filter #(= found-path (:path (parse-tag %))) tags-with-parents)
               neg-tags (map #(str "^" % "^") tags-here-with-parents)
+              ;; All commits on the current branch more recent than
+              ;; (and including) the most recent tag matching our
+              ;; version spec:
               commits
               , (map
                  parse-sha-refs
@@ -496,8 +501,14 @@
           reflist (filter #(and
                             (= (str proj-name) (:proj %))
                             (= found-path (:path %))) (map parse-tag refs))]
+      ;; Walk forward through time, looking for when the next commit
+      ;; is one too far (meaning: we have no further commits to
+      ;; consider or the project at this path has changed version or
+      ;; project name):
       (some (fn [[current next-commit]]
               (when (or (= :end next-commit)
+                        ;; Find if any of the refs of this commit are
+                        ;; voom tags at the same path:
                         (some #(let [t (parse-tag %)]
                                  (and
                                   (= "voom" (:prefix t))
