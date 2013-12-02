@@ -696,7 +696,8 @@
 (declare voom)
 (defn box
   [proj & args]
-  (let [[^String pwd ^String ififo ^String ofifo & rargs] args
+  (let [[^String ver ^String pwd ^String ififo ^String ofifo & rargs] args
+        _ (assert (= "1" ver))
         fpwd (File. pwd)
         fofifo (future (-> ofifo FileOutputStream. OutputStreamWriter.))
         fififo (future (-> ififo FileInputStream.))]

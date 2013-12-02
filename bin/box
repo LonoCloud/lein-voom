@@ -24,7 +24,8 @@ function run_box_job {
     mkfifo -m 600 "$ififo"
     mkfifo -m 600 "$ofifo"
 
-    lein voom :box "$PWD" "$ofifo" "$ififo" "$@" &
+    local cli_version=1
+    lein voom :box "$cli_version" "$PWD" "$ofifo" "$ififo" "$@" &
 
     echo "X" > "$ofifo" # prime the pump
     while read x; do
