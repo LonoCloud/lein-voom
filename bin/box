@@ -21,8 +21,18 @@ function run_box_job {
     local tdir=$(mktemp -d)
     local ififo="${tdir}/voom-box-fifo-in"
     local ofifo="${tdir}/voom-box-fifo-out"
+    local target_dir="$PWD"
     \mkfifo -m 600 "$ififo"
     \mkfifo -m 600 "$ofifo"
+
+    local d="$target_dir"
+    while [[ "/" != $(readlink -f $d) ]]; do
+        if [[ -d "$d/.voom-box" ]]; then
+           \cd $(readlink -f $d)
+           break
+        fi
+        d="$d/.."
+    done
 
     local cli_version=1
     \lein voom :box "$cli_version" "$PWD" "$ofifo" "$ififo" "$@" &
@@ -34,6 +44,11 @@ function run_box_job {
         echo "$?" > "$ofifo"
     done < "$ififo"
     echo "0" > "$ofifo"
+
+    # Return to our target location, as much as it still exists.
+    local d="$target_dir"
+    while ! [[ -d "$d" ]]; do d=$(dirname "$d"); done
+    \cd "$d"
 
     \rm "$ififo" "$ofifo"
     \rmdir "$tdir"
