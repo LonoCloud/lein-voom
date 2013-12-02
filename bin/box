@@ -21,11 +21,11 @@ function run_box_job {
     local tdir=$(mktemp -d)
     local ififo="${tdir}/voom-box-fifo-in"
     local ofifo="${tdir}/voom-box-fifo-out"
-    mkfifo -m 600 "$ififo"
-    mkfifo -m 600 "$ofifo"
+    \mkfifo -m 600 "$ififo"
+    \mkfifo -m 600 "$ofifo"
 
     local cli_version=1
-    lein voom :box "$cli_version" "$PWD" "$ofifo" "$ififo" "$@" &
+    \lein voom :box "$cli_version" "$PWD" "$ofifo" "$ififo" "$@" &
 
     echo "X" > "$ofifo" # prime the pump
     while read x; do
@@ -34,9 +34,9 @@ function run_box_job {
     done < "$ififo"
     echo "0" > "$ofifo"
 
-    rm "$ififo" "$ofifo"
-    rmdir "$tdir"
-    fg %- >/dev/null # silences job control output
+    \rm "$ififo" "$ofifo"
+    \rmdir "$tdir"
+    \fg %- >/dev/null # silences job control output
 }
 
 # TODO: signal/exit handler to kill background process
