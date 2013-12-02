@@ -27,6 +27,7 @@ function run_box_job {
     local cli_version=1
     \lein voom :box "$cli_version" "$PWD" "$ofifo" "$ififo" "$@" &
 
+    local x=""
     echo "X" > "$ofifo" # prime the pump
     while read x; do
         eval "$x"
