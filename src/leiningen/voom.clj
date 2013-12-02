@@ -501,7 +501,6 @@
                         (some #(let [t (parse-tag %)]
                                  (and
                                   (= "voom" (:prefix t))
-                                  (= (str proj-name) (:proj t))
                                   (= found-path (:path t))))
                               (:refs next-commit)))
                 (let [ver (-> reflist first :version)]
