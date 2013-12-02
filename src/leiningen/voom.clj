@@ -79,17 +79,17 @@
 
 (defn format-voom-ver
   [gver]
-  (let [{:keys [ver ctime sha]} gver]
-    (assert ver   (str "format-voom-ver requires :ver " (pr-str gver)))
+  (let [{:keys [version ctime sha]} gver]
+    (assert version   (str "format-voom-ver requires :version " (pr-str gver)))
     (assert ctime (str "format-voom-ver requires :ctime " (pr-str gver)))
     (assert sha   (str "format-voom-ver requires :sha " (pr-str gver)))
-    (str (s/replace ver #"-SNAPSHOT" "")
+    (str (s/replace version #"-SNAPSHOT" "")
          "-" (formatted-timestamp timestamp-fmt ctime) "-g" sha)))
 
 (defn update-proj-version
   [project long-sha?]
   (let [gver (-> project :root (get-voom-version :long-sha? long-sha?))
-        upfn #(format-voom-ver (assoc gver :ver %))
+        upfn #(format-voom-ver (assoc gver :version %))
         nproj (update-in project [:version] upfn)
         nmeta (update-in (meta project) [:without-profiles :version] upfn)
         nnproj (with-meta nproj nmeta)]
@@ -457,7 +457,7 @@
 (defn parse-tag
   [tag]
   (->
-   (zipmap [:prefix :proj :ver :path :sha :no-parent] (s/split tag #"--"))
+   (zipmap [:prefix :proj :version :path :sha :no-parent] (s/split tag #"--"))
    (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
@@ -504,11 +504,11 @@
                                   (= (str proj-name) (:proj t))
                                   (= found-path (:path t))))
                               (:refs next-commit)))
-                (let [ver (-> reflist first :ver)]
+                (let [ver (-> reflist first :version)]
                   (assert (not= nil ver) "Failed to find version for commit.")
                   {:sha (:sha current)
                    :ctime (:ctime current)
-                   :ver ver
+                   :version ver
                    :path found-path
                    :proj proj-name
                    :gitdir gitdir
@@ -524,7 +524,7 @@
                   (assoc :repo (-> (remotes (:gitdir info)) :origin :fetch))
                   (update-in [:sha] #(subs (str % "--------") 0 7)))))
        (sort-by :ctime)
-       (print-table [:repo :proj :ver :branch :path :ctime :sha]))
+       (print-table [:repo :proj :version :branch :path :ctime :sha]))
   (newline))
 
 (defn fresh-version [[prj ver :as dep]]
