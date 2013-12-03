@@ -634,17 +634,28 @@
         :when (.contains ^String proj dep)]
     proj))
 
-(defn adj-path
-  ([f path] (adj-path false f path))
-  ([dir-flag f path]
-     (->
-      ;; TODO Should this be made an isDirectory check?
-      (if (and = dir-flag (.isFile ^File f))
-        (.getParentFile ^File f)
-        ^File f)
-      (.getCanonicalPath)
-      ^String (str "/" path)
-      (File.))))
+(defn ^File to-file
+  [p]
+  (if (= File (type p))
+    p
+    (File. ^String p)))
+
+(defn ^File adj-path
+  [^File f & path]
+  (-> f
+      to-file
+      .getCanonicalPath
+      (str "/" (s/join "/" path))
+      File.))
+
+(defn ^File adj-dir
+  [p & path]
+  ;; TODO Should this be made an isDirectory check?
+  (let [^File f (to-file p)
+        d (if (.isFile f)
+            (.getParentFile f)
+            f)]
+    (apply adj-path d path)))
 
 (defn ^File find-box
   "Locates voom-box root starting from current working directory."
