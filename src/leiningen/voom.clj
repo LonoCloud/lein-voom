@@ -624,12 +624,12 @@
       ^String (str "/" path)
       (File.))))
 
-(defn find-box
+(defn ^File find-box
   "Locates voom-box root starting from current working directory."
-  [& args]
-  (loop [path (File. (System/getProperty "user.dir"))]
-    (let [ppath (.getCanonicalPath path)
-          pfile (File. (str ppath "/.voom-box"))]
+  []
+  (loop [^File path (or *pwd* (-> "user.dir" System/getProperty File.))]
+    (let [^File ppath (.getCanonicalPath path)
+          ^File pfile (File. (str ppath "/.voom-box"))]
       (when-not (= "/" ppath)
         (if (.exists pfile)
           path
