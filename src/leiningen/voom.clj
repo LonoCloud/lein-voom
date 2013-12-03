@@ -600,17 +600,19 @@
                            :desired-new-deps desired-new-deps
                            :tmp-file-name (str tmp-file)})))))))
 
+(defn all-projects
+  []
+  (into #{}
+        (flatten
+         (for [g (all-repos-dirs)]
+           (map #(s/replace (second (s/split % #"--")) #"%" "/")
+                (:lines (git {:gitdir g} "tag" "--list" "voom--*")))))))
+
 (defn resolve-short-proj
-  [dep]
-  (let [proj-set
-        , (into #{}
-                (flatten
-                 (for [g (all-repos-dirs)]
-                   (map #(s/replace (second (s/split % #"--")) #"%" "/")
-                        (:lines (git {:gitdir g} "tag" "--list" "voom--*"))))))]
-    (for [proj proj-set
-          :when (.contains ^String proj dep) ]
-      proj)))
+  [dep projects]
+  (for [proj projects
+        :when (.contains ^String proj dep)]
+    proj))
 
 (defn adj-path
   ([f path] (adj-path false f path))
@@ -685,7 +687,7 @@
           dep deps
           :let [full-projs (if (.contains (str dep) "/")
                              [dep]
-                             (resolve-short-proj (pr-str dep)))
+                             (resolve-short-proj (pr-str dep) (all-projects)))
                 full-projs (map symbol full-projs)
                 repo-infos (mapcat #(newest-voom-ver-by-spec % (meta dep)) full-projs)]]
     (case (count repo-infos)
