@@ -22,6 +22,7 @@ function run_box_job {
     local ififo="${tdir}/voom-box-fifo-in"
     local ofifo="${tdir}/voom-box-fifo-out"
     local target_dir="$PWD"
+    local cmd="$1"; shift
     \mkfifo -m 600 "$ififo"
     \mkfifo -m 600 "$ofifo"
 
@@ -35,7 +36,7 @@ function run_box_job {
     done
 
     local cli_version=1
-    \lein voom :box "$cli_version" "$target_dir" "$ofifo" "$ififo" "$@" &
+    \lein voom :box "$cli_version" "$target_dir" "$ofifo" "$ififo" ":box-${cmd}" "$@" &
 
     local x=""
     echo "X" > "$ofifo" # prime the pump
