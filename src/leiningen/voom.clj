@@ -116,7 +116,7 @@
 
 ;; === manage REPOS_HOME directory ===
 
-(def task-dir "/.voom-box")
+(def task-dir ".voom-box")
 
 (def repos-home (or (System/getenv "REPOS_HOME")
                     (str (System/getProperty "user.home")
@@ -661,8 +661,8 @@
   "Locates voom-box root starting from current working directory."
   []
   (loop [^File path (or *pwd* (-> "user.dir" System/getProperty File.))]
-    (let [^File ppath (.getCanonicalPath path)
-          ^File pfile (File. (str ppath "/.voom-box"))]
+    (let [^String ppath (.getCanonicalPath path)
+          ^File pfile (adj-dir ppath task-dir)]
       (when-not (= "/" ppath)
         (if (.exists pfile)
           path
@@ -672,7 +672,7 @@
   []
   (when-let [box (find-box)]
     (->> (.listFiles box)
-         (filter #(.contains (.getCanonicalPath ^File %) "/.voom-box/"))
+         (filter #(.contains (.getCanonicalPath ^File %) (str "/" task-dir "/")))
          (map (memfn ^File getName)))))
 
 (defn safe-delete-repo
@@ -690,7 +690,7 @@
     (let [pname (-> (str proj)
                     (s/replace #"/" "--"))
           pdir (adj-path bdir pname)
-          checkout (adj-path bdir (str ".voom-box/" pname))
+          checkout (adj-path bdir task-dir pname)
           g {:gitdir checkout}
           remote (-> (remotes gitdir) :origin :fetch)]
       (when (and (.exists ^File checkout)
@@ -743,8 +743,8 @@
           :let [prjs (resolve-short-proj a (all-boxes))]]
     (if (= 1 (count prjs))
       (let [box-root (find-box)
-            link (adj-path box-root (str "/" (first prjs)))
-            repo (adj-path box-root (str "/.voom-box/" (first prjs)))]
+            link (adj-path box-root (first prjs))
+            repo (adj-path box-root task-dir (first prjs))]
         (safe-delete-repo repo link))
       (do
         (print (str "Cannot remove '" a "', multiple matches:"))

@@ -13,7 +13,7 @@
   project directly on the classpath rather than having to install the
   dependency and restart the dependent project."
   [orig-fn project]
-  (let [f  (-> (:root project) (str "/.." voom/task-dir) File.)]
+  (let [f (voom/adj-dir (:root project) ".." voom/task-dir)]
     (if (.isDirectory f)
       (for [[d & _] (keys (lcp/get-dependencies :dependencies project))
             :let [dep-path (str (:root project) "/../" (name d))]
