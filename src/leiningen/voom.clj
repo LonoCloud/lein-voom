@@ -461,7 +461,7 @@
    (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
-(defn assert-good-version [ver tags neg-tags commits]
+(defn assert-good-version [ver proj-name version tags found-branch neg-tags commits]
   (when-not ver
     (println "Tags matching" proj-name version ":")
     (doseq [t tags]
@@ -519,7 +519,7 @@
                             (= (str proj-name) (:proj %))
                             (= found-path (:path %))) (map parse-tag refs))
           ver (-> reflist first :version)]
-      (assert-good-version ver tags neg-tags commits)
+      (assert-good-version ver proj-name version tags found-branch neg-tags commits)
       ;; Walk forward through time, looking for when the next commit
       ;; is one too far (meaning: we have no further commits to
       ;; consider or the project at this path has changed version or
