@@ -737,6 +737,19 @@
         (print "Multiple projects / locations match" (str \" dep \"\:))
         (print-repo-infos repo-infos)))))
 
+(defn box-init
+  [proj target & args]
+  (sh "mkdir" "-p" (adj-path target task-dir))
+  (apply box-add proj args))
+
+(defn box-new
+  [proj target & args]
+  (let [p (adj-path *pwd* target)]
+    (sh "mkdir" "-p" p)
+    (fcmd (str "target_dir='" (.getAbsolutePath p) "'"))
+    (binding [*pwd* p]
+      (apply box-init proj args))))
+
 (defn box-remove
   [proj & args]
   (doseq [a args
@@ -798,6 +811,8 @@
      (:parse kargset) (prn (ver-parse (first more-args)))
      (:find-box kargset) (prn (find-box))
      (:box kargset) (apply box project more-args)
+     (:box-new kargset) (apply box-new project more-args)
+     (:box-init kargset) (apply box-init project more-args)
      (:box-add kargset) (apply box-add project (map edn/read-string more-args))
      (:box-remove kargset) (apply box-remove project more-args)
      (:retag-all-repos kargset) (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p))))
