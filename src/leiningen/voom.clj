@@ -418,10 +418,13 @@
     (doseq [:when (seq proj-shas)
             {:keys [sha refs parents ops]} (report-progress gitdir proj-shas)
             {:keys [op path]} ops]
-      (when-let [p (and (not= "D" op)
-                        (robust-read-project gitdir sha path))]
+      (when-let [p (if (= "D" op)
+                     {:root (str (.getParent (io/file path)))}
+                     (robust-read-project gitdir sha path))]
         (let [tag (s/join "--" (-> ["voom"
-                                    (str (:group p) "%" (:name p))
+                                    (str (:group p)
+                                         (when (:group p) "%")
+                                         (:name p))
                                     (:version p)
                                     (s/replace (:root p) #"/" "%")
                                     (subs sha 0 7)]
