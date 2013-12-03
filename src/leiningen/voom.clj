@@ -637,6 +637,15 @@
           path
           (recur (.getParentFile path)))))))
 
+(defn safe-delete-repo
+  [checkout pdir]
+  (if-let [dirty (dirty-repo? checkout)]
+          (do (println "Must clean up repo:" pdir)
+              (prn dirty)
+              (lmain/abort "Please fix."))
+          (do (sh "rm" "-f" pdir)
+              (sh "rm" "-rf" checkout))))
+
 (defn box-repo-add
   [{:keys [gitdir branch sha proj path]}]
   (if-let [bdir (find-box)]
@@ -648,14 +657,7 @@
           remote (-> (remotes gitdir) :origin :fetch)]
       (when (and (.exists ^File checkout)
                  (not= remote (-> (remotes (:gitdir g)) :origin :fetch)))
-        (if-let [dirty (dirty-repo? (:gitdir g))]
-          (do (println "Must clean up repo:" pdir)
-              (prn dirty)
-              (lmain/abort "Please fix."))
-          (do (sh "rm" "-f" pdir)
-              ;; TODO: change directory out of checkout directory and back.
-              #_(fcmd "cd 'somewhere/outside/of/checkout'")
-              (sh "rm" "-rf" checkout))))
+        (safe-delete-repo checkout pdir))
       (if (.exists ^File checkout)
         (git g "fetch")
         (git {} "clone" remote "--refer" gitdir checkout))
