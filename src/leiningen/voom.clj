@@ -683,7 +683,9 @@
   (p-repos (fn [p] (tag-repo-projects p)))
   (doseq [:let [deps (fold-args-as-meta adeps)]
           dep deps
-          :let [full-projs (resolve-short-proj (pr-str dep))
+          :let [full-projs (if (.contains (str dep) "/")
+                             [dep]
+                             (resolve-short-proj (pr-str dep)))
                 full-projs (map symbol full-projs)
                 repo-infos (mapcat #(newest-voom-ver-by-spec % (meta dep)) full-projs)]]
     (case (count repo-infos)
