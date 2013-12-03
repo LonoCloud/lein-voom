@@ -35,7 +35,7 @@ function run_box_job {
     done
 
     local cli_version=1
-    \lein voom :box "$cli_version" "$PWD" "$ofifo" "$ififo" "$@" &
+    \lein voom :box "$cli_version" "$target_dir" "$ofifo" "$ififo" "$@" &
 
     local x=""
     echo "X" > "$ofifo" # prime the pump
