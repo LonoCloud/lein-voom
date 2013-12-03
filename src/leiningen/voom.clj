@@ -637,6 +637,13 @@
           path
           (recur (.getParentFile path)))))))
 
+(defn all-boxes
+  []
+  (when-let [box (find-box)]
+    (->> (.listFiles box)
+         (filter #(.contains (.getCanonicalPath ^File %) "/.voom-box/"))
+         (map (memfn ^File getName)))))
+
 (defn safe-delete-repo
   [checkout pdir]
   (if-let [dirty (dirty-repo? checkout)]
@@ -699,6 +706,21 @@
         (print "Multiple projects / locations match" (str \" dep \"\:))
         (print-repo-infos repo-infos)))))
 
+(defn box-remove
+  [proj & args]
+  (doseq [a args
+          :let [prjs (resolve-short-proj a (all-boxes))]]
+    (if (= 1 (count prjs))
+      (let [box-root (find-box)
+            link (adj-path box-root (str "/" (first prjs)))
+            repo (adj-path box-root (str "/.voom-box/" (first prjs)))]
+        (safe-delete-repo repo link))
+      (do
+        (print (str "Cannot remove '" a "', multiple matches:"))
+        (doseq [p prjs]
+          (print (str " " p)))
+        (println)))))
+
 (declare voom)
 (defn box
   [proj & args]
@@ -746,6 +768,7 @@
      (:find-box kargset) (prn (find-box))
      (:box kargset) (apply box project more-args)
      (:box-add kargset) (apply box-add project (map edn/read-string more-args))
+     (:box-remove kargset) (apply box-remove project more-args)
      (:retag-all-repos kargset) (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p))))
      (:freshen kargset) (freshen project)
      (:build-deps kargset) (build-deps project)
