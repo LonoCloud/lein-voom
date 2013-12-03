@@ -461,6 +461,19 @@
    (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
+(defn assert-good-version [ver tags neg-tags commits]
+  (when-not ver
+    (println "Tags matching" proj-name version ":")
+    (doseq [t tags]
+      (prn t))
+    (println "Tag filters to exclude from branch" found-branch ":")
+    (doseq [t neg-tags]
+      (prn t))
+    (println "Commits:")
+    (doseq [c commits]
+      (prn c))
+    (throw (ex-info "Failed to find version for commit." {}))))
+
 (defn newest-voom-ver-by-spec
   [proj-name {:keys [version repo branch path]
               :or {version ""}}]
@@ -500,7 +513,9 @@
     (let [refs (-> commits first :refs)
           reflist (filter #(and
                             (= (str proj-name) (:proj %))
-                            (= found-path (:path %))) (map parse-tag refs))]
+                            (= found-path (:path %))) (map parse-tag refs))
+          ver (-> reflist first :version)]
+      (assert-good-version ver tags neg-tags commits)
       ;; Walk forward through time, looking for when the next commit
       ;; is one too far (meaning: we have no further commits to
       ;; consider or the project at this path has changed version or
@@ -514,15 +529,13 @@
                                   (= "voom" (:prefix t))
                                   (= found-path (:path t))))
                               (:refs next-commit)))
-                (let [ver (-> reflist first :version)]
-                  (assert (not= nil ver) "Failed to find version for commit.")
-                  {:sha (:sha current)
-                   :ctime (:ctime current)
-                   :version ver
-                   :path found-path
-                   :proj proj-name
-                   :gitdir gitdir
-                   :branch found-branch})))
+                {:sha (:sha current)
+                 :ctime (:ctime current)
+                 :version ver
+                 :path found-path
+                 :proj proj-name
+                 :gitdir gitdir
+                 :branch found-branch}))
             (partition 2 1 (concat commits [:end]))))))
 
 (defn print-repo-infos
