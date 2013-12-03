@@ -174,7 +174,7 @@
 (defn find-project-files
   [^File d]
   (let [{:keys [lines]} (git {:gitdir d} "ls-files" "project.clj" "**/project.clj")]
-    (map #(str (.getParent d) "/" %) lines)))
+    (map #(str d "/" %) lines)))
 
 (defn contains-sha? [d sha]
   (->>
