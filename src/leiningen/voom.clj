@@ -497,8 +497,12 @@
                                                      "--simplify-by-decoration" "-m" (str "^origin/" found-branch)))))
               ;; yes-yes-tags are the matching tags reachable via this branch:
               yes-yes-tags (set/difference tags not-not-tags)
-              tags-with-parents (remove #(.endsWith ^String % "--no-parent") yes-yes-tags)
-              tags-here-with-parents (filter #(= found-path (:path (parse-tag %))) tags-with-parents)
+              tags-here (filter #(= found-path (:path (parse-tag %))) yes-yes-tags)]
+        ;; If this branch contains no matching tags, the
+        ;; project+version we're looking for must not be on this
+        ;; branch. Skip it.
+        :when (seq tags-here)
+        :let [tags-here-with-parents (remove #(.endsWith ^String % "--no-parent") tags-here)
               neg-tags (map #(str "^" % "^") tags-here-with-parents)
               ;; All commits on the current branch more recent than
               ;; (and including) the most recent tag matching our
