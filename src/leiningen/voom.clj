@@ -642,21 +642,20 @@
     (File. ^String p)))
 
 (defn ^File adj-path
-  [^File f & path]
-  (-> f
-      to-file
-      .getCanonicalPath
-      (str "/" (s/join "/" path))
-      File.))
+  "Adjusts current File object with subsequent elements."
+  [^File f & elems]
+  (reduce #(-> (File. ^File %1 ^String %2) .toPath .normalize .toFile)
+          f
+          elems))
 
 (defn ^File adj-dir
-  [p & path]
+  [p & elems]
   ;; TODO Should this be made an isDirectory check?
   (let [^File f (to-file p)
         d (if (.isFile f)
             (.getParentFile f)
             f)]
-    (apply adj-path d path)))
+    (apply adj-path d elems)))
 
 (defn ^File find-box
   "Locates voom-box root starting from current working directory."
