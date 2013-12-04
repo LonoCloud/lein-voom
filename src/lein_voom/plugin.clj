@@ -8,18 +8,33 @@
 
 ;; == Hooke hooks ==
 
+;; Priate defn- from leinignen.core.classpath
+(defn- checkout-dep-paths [project dep-project]
+  ;; can't mapcat here since :checkout-deps-shares points to vectors and strings
+  (flatten (map #(% dep-project) (:checkout-deps-shares project))))
+
 (defn checkout-deps-paths
   "Checkout dependencies are used to place source for a dependency
   project directly on the classpath rather than having to install the
   dependency and restart the dependent project."
   [orig-fn project]
-  (let [f (voom/adj-dir (:root project) ".." voom/task-dir)]
-    (if (.isDirectory f)
-      (for [[d & _] (keys (lcp/get-dependencies :dependencies project))
-            :let [dep-path (str (:root project) "/../" (name d))]
-            :when (-> dep-path File. .isDirectory)]
-        dep-path)
-      (orig-fn project))))
+  (->
+   (when-let [f  (voom/find-box)]
+     (apply concat
+            (for [[d & _] (keys (lcp/get-dependencies :dependencies project))
+                  :let [dep-name (str (or (namespace d) (name d)) "--" (name d))
+                        proj-path (voom/adj-path f dep-name "project.clj")]
+                  :when (.isFile proj-path)
+                  ;; The below is from lcp/read-dependency-project:
+                  ;;   TODO: core.project and core.classpath currently rely upon each other *uk*
+                  :let [_ (require 'leiningen.core.project)
+                        dep-proj
+                        , (try ((resolve 'leiningen.core.project/read) (.getAbsolutePath proj-path) [:default])
+                               (catch Exception e
+                                 (throw (Exception. (format "Problem loading %s" project) e))))]
+                  :when dep-proj]
+              (checkout-dep-paths project dep-proj))))
+   (concat (orig-fn project))))
 
 
 (defn hooks []
