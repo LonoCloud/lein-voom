@@ -555,7 +555,7 @@
                   (assoc :repo (-> (remotes (:gitdir info)) :origin :fetch))
                   (update-in [:sha] #(subs (str % "--------") 0 7)))))
        (sort-by :ctime)
-       (print-table [:repo :proj :version :branch :path :ctime :sha]))
+       (print-table [:repo :path :proj :version :branch :ctime :sha]))
   (newline))
 
 (defn fresh-version [[prj ver :as dep]]
