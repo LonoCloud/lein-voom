@@ -498,8 +498,8 @@
     (throw (ex-info "Failed to find version for commit." {}))))
 
 (defn newest-voom-ver-by-spec
-  [proj-name {:keys [version repo branch path]
-              :or {version ""}}]
+  [proj-name {:keys [version repo branch path allow-snaps]
+              :or {version "" allow-snaps true}}]
   (for [gitdir (all-repos-dirs)
         :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
         :let [ptn (s/join "--" ["voom"
@@ -536,12 +536,16 @@
                  (:lines (apply git {:gitdir gitdir} "log"
                                 "--pretty=format:%H,%cd,%p,%d" "--full-history" "--reverse"
                                 (concat neg-tags [(str "origin/" found-branch) "--" found-path]))))]
-        :when (seq commits)]
-    (let [refs (-> commits first :refs)
-          reflist (filter #(and
-                            (= (str proj-name) (:proj %))
-                            (= found-path (:path %))) (map parse-tag refs))
-          ver (-> reflist first :version)]
+        :when (seq commits)
+        :let [refs (-> commits first :refs)
+              reflist (filter #(and
+                                (= (str proj-name) (:proj %))
+                                (= found-path (:path %)))
+                              (map parse-tag refs))
+              ver (-> reflist first :version)
+              snaps (-> reflist first :snaps)]
+        :when (or allow-snaps (not snaps))]
+    (do
       (assert-good-version ver proj-name version tags found-branch neg-tags commits)
       ;; Walk forward through time, looking for when the next commit
       ;; is one too far (meaning: we have no further commits to
@@ -581,7 +585,8 @@
   (let [voom-meta (:voom (meta dep))
         ver-spec (or (:version voom-meta)
                      (re-find #"^[^.]+." ver))
-        groups (->> (newest-voom-ver-by-spec prj (assoc voom-meta :version ver-spec))
+        groups (->> (newest-voom-ver-by-spec prj (merge voom-meta {:version ver-spec
+                                                                   :allow-snaps false}))
                     (map #(assoc % :voom-ver (format-voom-ver
                                               (update-in % [:sha] subs 0 7))))
                     (group-by :voom-ver))]
