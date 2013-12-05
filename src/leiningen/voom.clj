@@ -408,7 +408,7 @@
        (keep second)
        (filter :ops)))
 
-(def repo-tag-version "0")
+(def repo-tag-version "1")
 
 (defn get-repo-tag-version
   [gitdir]
@@ -447,15 +447,17 @@
       (when-let [p (if (= "D" op)
                      {:root (str (.getParent (io/file path)))}
                      (robust-read-project gitdir sha path))]
-        (let [tag (s/join "--" (-> ["voom"
+        (let [snaps (some #(.contains ^String % "-SNAPSHOT")
+                         (map second (:dependencies p)))
+              tag (s/join "--" (-> ["voom"
                                     (str (:group p)
                                          (when (:group p) "%")
                                          (:name p))
                                     (:version p)
                                     (s/replace (:root p) #"/" "%")
-                                    (subs sha 0 7)]
-                                   (cond-> (empty? parents)
-                                     (conj "no-parent"))))]
+                                    (subs sha 0 7)
+                                    (and snaps "snaps")
+                                    (and (empty? parents) "no-parent")]))]
           (git {:gitdir gitdir} "tag" "-f" tag sha))))
 
     ;; TODO: clean up abandoned voom-- and voom-branch-- tags
@@ -478,7 +480,7 @@
 (defn parse-tag
   [tag]
   (->
-   (zipmap [:prefix :proj :version :path :sha :no-parent] (s/split tag #"--"))
+   (zipmap [:prefix :proj :version :path :sha :snaps :no-parent] (s/split tag #"--"))
    (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
    (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
 
