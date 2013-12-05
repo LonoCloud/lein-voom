@@ -408,8 +408,33 @@
        (keep second)
        (filter :ops)))
 
+(def repo-tag-version "0")
+
+(defn get-repo-tag-version
+  [gitdir]
+  (-> (git {:gitdir gitdir :ok-statuses #{0 1}}
+           "config" "--local" "voom.tag-version") :out s/trim))
+
+(defn set-repo-tag-version
+  [gitdir ver]
+  (git {:gitdir gitdir :ok-statuses #{0 5}}
+       "config" "--local" "--unset-all" "voom.tag-version")
+  (git {:gitdir gitdir}
+       "config" "--local" "--add" "voom.tag-version" (str ver)))
+
+(defn clear-voom-tags
+  [gitdir]
+  (let [tags (->> (git {:gitdir gitdir} "tag" "--list" "voom-*")
+                  :lines
+                  (remove empty?))]
+    (when (seq tags)
+      (apply git {:gitdir gitdir} "tag" "--delete" tags)
+      nil)))
+
 (defn tag-repo-projects
   [gitdir]
+  (when (not= repo-tag-version (get-repo-tag-version gitdir))
+    (clear-voom-tags gitdir))
   (let [branches (origin-branches gitdir)
         proj-shas (apply project-change-shas gitdir
                          "--not" "--tags=voom-branch--*"
@@ -437,7 +462,8 @@
     ;; Update all voom-branch-- tags
     (doseq [branch branches]
       (let [tag (str "voom-branch--" branch)]
-        (git {:gitdir gitdir} "tag" "-f" tag (str "origin/" branch))))))
+        (git {:gitdir gitdir} "tag" "-f" tag (str "origin/" branch)))))
+  (set-repo-tag-version gitdir repo-tag-version))
 
 (defn p-repos
   "Call f once for each repo dir, in parallel. When all calls are
@@ -448,15 +474,6 @@
        doall
        (map deref)
        dorun))
-
-(defn clear-voom-tags
-  [gitdir]
-  (let [tags (->> (git {:gitdir gitdir} "tag" "--list" "voom-*")
-                  :lines
-                  (remove empty?))]
-    (when (seq tags)
-      (apply git {:gitdir gitdir} "tag" "--delete" tags)
-      nil)))
 
 (defn parse-tag
   [tag]
