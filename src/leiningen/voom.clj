@@ -408,7 +408,7 @@
        (keep second)
        (filter :ops)))
 
-(def repo-tag-version "1")
+(def repo-tag-version "2")
 
 (defn get-repo-tag-version
   [gitdir]
@@ -456,8 +456,8 @@
                                     (:version p)
                                     (s/replace (:root p) #"/" "%")
                                     (subs sha 0 7)
-                                    (and snaps "snaps")
-                                    (and (empty? parents) "no-parent")]))]
+                                    (when snaps "snaps")
+                                    (when (empty? parents) "no-parent")]))]
           (git {:gitdir gitdir} "tag" "-f" tag sha))))
 
     ;; TODO: clean up abandoned voom-- and voom-branch-- tags
