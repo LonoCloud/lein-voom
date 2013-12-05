@@ -526,7 +526,7 @@
         ;; branch. Skip it.
         :when (seq tags-here)
         :let [tags-here-with-parents (remove #(.endsWith ^String % "--no-parent") tags-here)
-              neg-tags (map #(str "^" % "^") tags-here-with-parents)
+              neg-tags (map #(str "^" % "^@") tags-here-with-parents)
               ;; All commits on the current branch more recent than
               ;; (and including) the most recent tag matching our
               ;; version spec:
