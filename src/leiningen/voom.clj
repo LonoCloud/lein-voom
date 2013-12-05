@@ -534,7 +534,7 @@
               , (map
                  parse-sha-refs
                  (:lines (apply git {:gitdir gitdir} "log"
-                                "--pretty=format:%H,%cd,%p,%d" "--reverse"
+                                "--pretty=format:%H,%cd,%p,%d" "--full-history" "--reverse"
                                 (concat neg-tags [(str "origin/" found-branch) "--" found-path]))))]
         :when (seq commits)]
     (let [refs (-> commits first :refs)
