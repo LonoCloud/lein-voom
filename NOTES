@@ -43,3 +43,6 @@ NEEDS:
 - should have basic box construction
 - should have transitive bumping in boxes
 - should have auto bumping so
+
+Ideas:
+- Use this for parallel build progress indication: ▁ ▂ ▃ ▄ ▅ ▆ ▇ █
