@@ -114,11 +114,11 @@
     (not (empty? out))))
 
 
-;; === manage REPOS_HOME directory ===
+;; === manage VOOM_REPOS directory ===
 
 (def task-dir ".voom-box")
 
-(def repos-home (or (System/getenv "REPOS_HOME")
+(def voom-repos (or (System/getenv "VOOM_REPOS")
                     (str (System/getProperty "user.home")
                          (str "/.voom-repos"))))
 
@@ -190,7 +190,7 @@
          d)))
 
 (defn all-repos-dirs []
-  (glob (str (s/replace repos-home #"/$" "") "/*")))
+  (glob (str (s/replace voom-repos #"/$" "") "/*")))
 
 (defn fetch-all
   [dirs]
@@ -255,11 +255,11 @@
   [old-exception {:keys [artifactId version] :as art}]
 
   (if-let [vmap (ver-parse version)]
-    (let [prjs (find-matching-projects repos-home (merge vmap art))]
+    (let [prjs (find-matching-projects voom-repos (merge vmap art))]
       (when (empty? prjs)
         (throw (ex-info (str "No project found for " artifactId " " version
                              " (Hint: might need to clone a new repo into "
-                             repos-home ")")
+                             voom-repos ")")
                         {:artifact art :vmap vmap} old-exception)))
       (when (< 1 (count prjs))
         (println "WARNING: multiple projects match" artifactId ":" )
@@ -292,7 +292,7 @@
         (throw e)))))
 
 (defn build-deps
-  "Resolves project dependencies like 'lein deps', but also uses REPOS_HOME"
+  "Like 'lein deps', but also builds voom-versioned things as needed."
   [project & args]
   (try
     (loop []
