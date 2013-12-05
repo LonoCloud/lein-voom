@@ -95,7 +95,7 @@
         nnproj (with-meta nproj nmeta)]
     nnproj))
 
-(defn ver-parse
+(defn ^:info-subtask ver-parse
   "Parses jar-path-like-string or artifact-version-string to find ctime and sha.
    Can handle cases in the range of:
      1.2.3-20120219223112-abc123f
@@ -228,9 +228,10 @@
 
 (defn install-versioned-artifact
   [proot]
-  (let [install-cmd ["lein" "voom" "install" :dir proot]
+  ;; TODO: voom build-deps first, then wrap install:
+  (let [install-cmd ["lein" "voom" "wrap" "install" :dir proot]
         _ (apply println "install-versioned-artifact:" install-cmd)
-        rtn (sh "lein" "voom" "install" :dir proot)]
+        rtn (apply sh install-cmd)]
     (when-not (zero? (:exit rtn))
       (throw (ex-info "lein voom install error" (assoc rtn :cmd install-cmd))))
     rtn))
@@ -616,7 +617,25 @@
           input-str
           replacement-map))
 
-(defn freshen [project & args]
+(defn freshen
+  "Modify dependency versions in this project.clj based on what's available in $VOOM_REPOS
+
+  Fetches latest upstream commits for all repos in $VOOM_REPOS (usually
+  ~/.voom-repos), index-tags those commits as needed, and then finds
+  the latest version for each dependency that matches any voom
+  metadata applied to the dep. Updates the project.clj file in place
+  with the version found.
+
+  Metadata on a dep can restrict versions found based on :repo,
+  :branch, path, and partial :version.  For example:
+  ^{:voom {:version \"1\", :path \"modules/foo\"}} [bar/foo \"1.0.0\"]
+
+  Will only update deps that can be found as lein projects in
+  $VOOM_REPOS, so you may need to manually clone new working copies
+  there so voom can find your deps.
+
+  Example: lein voom freshen"
+  [project]
   (p-repos (fn [p] (fetch-all [p]) (tag-repo-projects p)))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
@@ -681,7 +700,7 @@
             f)]
     (apply adj-path d elems)))
 
-(defn ^File find-box
+(defn ^:info-subtask ^File find-box
   "Locates voom-box root starting from current working directory."
   []
   (loop [^File path (or *pwd* (-> "user.dir" System/getProperty File.))]
@@ -747,7 +766,7 @@
 (defn box-add
   [proj & adeps]
   (p-repos (fn [p] (tag-repo-projects p)))
-  (doseq [:let [deps (fold-args-as-meta adeps)]
+  (doseq [:let [deps (fold-args-as-meta (map edn/read-string adeps))]
           dep deps
           :let [full-projs (if (.contains (str dep) "/")
                              [dep]
@@ -807,42 +826,72 @@
 
 ;; === lein entrypoint ===
 
-;; TODO: Consider revamping these entry points. Separate top-level
-;; lein commands?  Separate lein plugins?
-(defn ^:no-project-needed voom
-  "Usage:
-    lein voom [flags] [lein command ...]
-      Runs lein command with a project version augmented with git
-      version of the most recent change of this project directory.
-      Flags include:
-        :insanely-allow-dirty-working-copy - by default voom
-          refuses to handle a dirty working copy
-        :no-upstream - by default voom wants to see the current
-          version reachable via an upstream repo
-        :long-sha - uses a full length sha instead of the default
-          short form
-    lein voom [:long-sha] :print
-    lein voom :parse <version-str>"
+(defn wrap
+  "Execute any lein task, but using git info as this project's version qualifier.
+
+   Usage: lein voom wrap [<flags>] <lein task name> <lein task args>
+
+   Flags:
+     :insanely-allow-dirty-working-copy - by default voom sanely
+         refuses to generate a voom-version from a dirty working copy
+     :long-sha - uses a full length sha instead of the default
+         short form
+
+   Example: lein voom wrap install"
   [project & args]
   (let [[kw-like more-args] (split-with #(re-find #"^:" %) args)
         kargset (set (map edn/read-string kw-like))
-        sargs (map edn/read-string more-args)
-        long-sha (kargset :long-sha)
-        new-project (delay (update-proj-version project long-sha))]
+        new-project (update-proj-version project (:long-sha kargset))]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
-    (cond
-     (:print kargset) (println (:version @new-project))
-     (:parse kargset) (prn (ver-parse (first more-args)))
-     (:find-box kargset) (prn (find-box))
-     (:box kargset) (apply box project more-args)
-     (:box-new kargset) (apply box-new project more-args)
-     (:box-init kargset) (apply box-init project more-args)
-     (:box-add kargset) (apply box-add project (map edn/read-string more-args))
-     (:box-remove kargset) (apply box-remove project more-args)
-     (:retag-all-repos kargset) (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p))))
-     (:freshen kargset) (freshen project)
-     (:build-deps kargset) (build-deps project)
-     :else (if (and (dirty-wc? (:root @new-project))
-                    (not (:insanely-allow-dirty-working-copy kargset)))
-             (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
-             (lmain/resolve-and-apply @new-project more-args)))))
+    ;;    :no-upstream - by default voom wants to see the current
+    ;;      version reachable via an upstream repo
+    (if (and (dirty-wc? (:root new-project))
+             (not (:insanely-allow-dirty-working-copy kargset)))
+      (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
+      (lmain/resolve-and-apply new-project more-args))))
+
+(defn install
+  "Same as 'lein voom wrap install': install a voom-versioned artifact of this project.
+
+  Example: lein voom install"
+  [project & args]
+  (apply wrap project "install" args))
+
+(defn deploy
+  "Same as 'lein voom wrap deploy': deploy a voom-versioned artifact of this project.
+
+  Example: lein voom deploy clojars"
+  [project & args]
+  (apply wrap project "deploy" args))
+
+(defn retag-all-repos
+  "Clear and recreate all voom index tags in $VOOM_REPOS.
+
+  You shouldn't need to use this usually because the index tags are
+  automatically added incrementally and re-generated when tag schemas
+  change.
+
+  Example: lein voom retag-all-repos"
+  [_]
+  (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p)))))
+
+(def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
+               #'retag-all-repos #'ver-parse #'wrap])
+
+(def internal-subtasks [#'box #'box-new #'box-init #'box-add #'box-remove])
+
+(defn ^:no-project-needed ^{:subtasks subtasks} voom
+  "Generate and use artifacts versioned with git commit and commit time.
+
+  There are several subtasks, as well as the 'box' script which has
+  several commands of its own, built using this plugin."
+  [project subtask-name & args]
+
+  (let [subtask-var (resolve (symbol "leiningen.voom"
+                                     (s/replace subtask-name #"^:" "")))]
+    (if-let [subtask (some #{subtask-var} (concat subtasks internal-subtasks))]
+      (if (:info-subtask (meta subtask))
+        (prn (apply subtask args))
+        (apply subtask project args))
+      (println "No voom subtask found" (prn-str subtask-name)
+               " Try: lein help voom"))))
