@@ -968,6 +968,42 @@
                         (zipmap [:sha :ctime :tree :parents]
                                 [sha ctime tree parents])))))
 
+(defn filter-shas
+  [otype shas]
+  (-> shas
+   (->>
+    (map #(take 2 (s/split % #" " 3)))
+    (apply concat)
+    (apply hash-map)
+    (group-by val))
+   (get otype)
+   (->> (map first))))
+
+(defn all-git-trees
+  [gitdir]
+  (let [g {:gitdir gitdir}
+        pack-files (glob (str gitdir "/.git/objects/pack/*"))
+        pack-shas (->>
+                   pack-files
+                   (apply git g "verify-pack" "-v")
+                   :lines
+                   (filter-shas "tree"))
+        obj-files (glob (str gitdir "/.git/objects/??/*"))
+        all-obj-shas (for [f obj-files]
+                   (->>
+                    (s/split (.getPath ^File f) #"/")
+                    rseq
+                    (take 2)
+                    reverse
+                    (apply str)))
+        obj-shas (->>
+                  (git (assoc g :sh-opts [:in (s/join "\n" all-obj-shas)])
+                       "cat-file" "--batch-check=%(objectname) %(objecttype)")
+                  :lines
+                  (filter-shas "tree"))
+        all-shas (concat pack-shas obj-shas)]
+    all-shas)
+
   (defn import-db
     [gitdir]
     (let [uri "datomic:mem://voom"
