@@ -1002,38 +1002,38 @@
                   :lines
                   (filter-shas "tree"))
         all-shas (concat pack-shas obj-shas)]
-    all-shas)
+    all-shas))
 
-  (defn import-db
-    [gitdir]
-    (let [uri "datomic:mem://voom"
-          _ (d/delete-database uri)
-          _ (d/create-database uri)
-          conn (d/connect uri)
-          commits (git-commits gitdir "origin/master")
-          stxn (map gen-schema datomic-schema)
-          txn (apply concat
-                     (for [c commits
-                           :let [{:keys [sha ctime tree parents]} c
-                                 id (d/tempid :db.part/user)
-                                 cid (d/tempid :db.part/user)
-                                 tid (d/tempid :db.part/user)]]
-                       (concat
-                        [[:db/add id :git/type :commit]
-                         [:db/add id :git/sha sha]
-                         [:db/add id :commit/tree cid]
-                         [:db/add cid :node/object tid]
-                         [:db/add tid :git/type :tree]
-                         [:db/add tid :git/sha tree]]
-                        (apply concat
-                               (for [p parents
-                                     :let [pid (d/tempid :db.part/user)]]
-                                 [[:db/add pid :git/type :commit]
-                                  [:db/add pid :git/sha p]
-                                  [:db/add id :commit/parents pid]])))))]
-      @(d/transact conn stxn)
-      @(d/transact conn txn)
-      :done)))
+(defn import-db
+  [gitdir]
+  (let [uri "datomic:mem://voom"
+        _ (d/delete-database uri)
+        _ (d/create-database uri)
+        conn (d/connect uri)
+        commits (git-commits gitdir "origin/master")
+        stxn (map gen-schema datomic-schema)
+        txn (apply concat
+                   (for [c commits
+                         :let [{:keys [sha ctime tree parents]} c
+                               id (d/tempid :db.part/user)
+                               cid (d/tempid :db.part/user)
+                               tid (d/tempid :db.part/user)]]
+                     (concat
+                      [[:db/add id :git/type :commit]
+                       [:db/add id :git/sha sha]
+                       [:db/add id :commit/tree cid]
+                       [:db/add cid :node/object tid]
+                       [:db/add tid :git/type :tree]
+                       [:db/add tid :git/sha tree]]
+                      (apply concat
+                             (for [p parents
+                                   :let [pid (d/tempid :db.part/user)]]
+                               [[:db/add pid :git/type :commit]
+                                [:db/add pid :git/sha p]
+                                [:db/add id :commit/parents pid]])))))]
+    @(d/transact conn stxn)
+    @(d/transact conn txn)
+    :done))
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
                #'retag-all-repos #'ver-parse #'wrap])
