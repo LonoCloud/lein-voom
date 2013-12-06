@@ -5,11 +5,14 @@
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.edn :as edn]
+            [datomic.api :as d]
+            [datomic.db :as db]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
-  (:import [java.util Date]
+  (:import [clojure.lang #_IPersistentVector Seqable]
+           [java.util Date]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter]
            [java.util.logging Logger Handler Level]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
