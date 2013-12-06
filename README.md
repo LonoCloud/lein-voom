@@ -2,6 +2,8 @@
 
 ![voom](docs/dr-seuss-voom.png)
 
+_— Dr. Seuss, ["The Cat in the Hat Comes Back"](http://www.youtube.com/watch?v=l2--VIgp4CM)_
+
 lein-voom is a Leiningen plugin that helps you clean up your dependency tree.
 
 ## Usage [TL;DR]
