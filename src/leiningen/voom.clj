@@ -16,6 +16,78 @@
 
 (set! *warn-on-reflection* true)
 
+;;=== namespace aliases, mainly for use with datomic ===
+(alias 'v 'leiningen.voom)
+(create-ns 'db.type) (alias 'dt 'db.type)
+(create-ns 'db.cardinality) (alias 'c 'db.cardinality)
+
+(def ns-key
+  {"db.type" :db/valueType
+   "db.cardinality" :db/cardinality
+   "db.unique" :db/unique})
+
+;;=== local types ===
+
+(defn reduce-schema-item [m item]
+  (if-let [k (and (keyword? item) (ns-key (namespace item)))]
+    (assoc m k item)
+    (cond
+     (string? item) (assoc m :db/doc item)
+     (instance? Seqable item) (let [[fn-op params & code] item]
+                                (-> m
+                                  (dissoc :db/cardinality :db.install/_attribute)
+                                  (assoc :db/fn (datomic.function/construct
+                                                 {:lang "clojure"
+                                                  :params params
+                                                  :code (cons 'do code)}))))
+     :else (assoc m item true))))
+
+(defn schema [[id & more]]
+  (reduce reduce-schema-item
+          {:db/id (db/id-literal [:db.part/db])
+           :db/ident id
+           :db/cardinality ::c/one
+           :db.install/_attribute :db.part/db}
+          more))
+
+;;=== datomic schema ===
+
+(def datomic-schema
+  ;; git stuff, named like codeq
+  '[(:git/type ::c/one ::dt/keyword :db/index
+               "Type enum for git objects - one of :commit, :tree, :blob, :tag")
+    (:git/sha ::c/one ::dt/string :db.unique/identity
+              "A git sha, should be in repo")
+    (:repo/uri ::c/one ::dt/string :db.unique/identity "A git repo uri")
+    (:commit/parents ::c/many ::dt/ref "Parents of a commit")
+    (:commit/tree ::c/one ::dt/ref "Root node of a commit")
+    (:commit/committedAt ::c/one ::dt/instant "Timestamp of commit")
+    (:tree/nodes ::c/many ::dt/iref "Nodes of a git tree")
+    (:node/filename ::c/one ::dt/ref "filename of a tree node")
+    (:node/paths ::c/many ::dt/ref "paths of a tree node")
+    (:node/object ::c/one ::dt/ref "Git object (tree/blob) in a tree node")
+    (:file/name ::c/one ::dt/string :db.unique/identity "A filename")
+
+    ;; git stuff, not like codeq
+    (:repo/branch ::c/many ::dt/ref "Named branch of a commit")
+    (:branch/name ::c/one ::dt/string :db.unique/identity
+                  "Name of a git repo's branch")
+    (:branch/tip ::c/one ::dt/ref "Commit this branch is currently pointing to")
+
+    ;; lein version stuff
+    (:project-node/version ::c/one ::dt/ref
+                           "Lein semantic version declared in this project.clj")
+    (:lein-version ::c/one ::dt/string :db.unique/identity
+                   )
+
+
+   ])
+
+
+
+
+;;=== FIFO and shell functions ===
+
 (def ^:dynamic ^FileInputStream *ififo* nil)
 (def ^:dynamic ^OutputStreamWriter *ofifo* nil)
 (def ^:dynamic ^File *pwd* nil)
