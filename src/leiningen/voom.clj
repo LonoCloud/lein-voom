@@ -123,13 +123,13 @@
     -1))
 
 (defn git
-  [{:keys [^File gitdir ok-statuses]
+  [{:keys [^File gitdir ok-statuses sh-opts]
     :or {ok-statuses #{0}}} & subcmd]
   ;; We won't handle bare repos or displaced worktrees
   (let [cmd-args (if (nil? gitdir)
                    []
                    [:dir gitdir])
-        all-args (concat subcmd cmd-args)
+        all-args (concat subcmd cmd-args sh-opts)
         ;; _ (prn :calling (doall (cons 'git all-args)))
         {:keys [exit] :as rtn} (apply sh "git" all-args)
         rtn (assoc rtn :bool (if (zero? (:exit rtn))
