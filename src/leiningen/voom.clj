@@ -45,7 +45,7 @@
                                                   :code (cons 'do code)}))))
      :else (assoc m item true))))
 
-(defn schema [[id & more]]
+(defn gen-schema [[id & more]]
   (reduce reduce-schema-item
           {:db/id (db/id-literal [:db.part/db])
            :db/ident id
@@ -57,35 +57,42 @@
 
 (def datomic-schema
   ;; git stuff, named like codeq
-  '[(:git/type ::c/one ::dt/keyword :db/index
-               "Type enum for git objects - one of :commit, :tree, :blob, :tag")
-    (:git/sha ::c/one ::dt/string :db.unique/identity
-              "A git sha, should be in repo")
-    (:repo/uri ::c/one ::dt/string :db.unique/identity "A git repo uri")
-    (:commit/parents ::c/many ::dt/ref "Parents of a commit")
-    (:commit/tree ::c/one ::dt/ref "Root node of a commit")
-    (:commit/committedAt ::c/one ::dt/instant "Timestamp of commit")
-    (:tree/nodes ::c/many ::dt/iref "Nodes of a git tree")
-    (:node/filename ::c/one ::dt/ref "filename of a tree node")
-    (:node/paths ::c/many ::dt/ref "paths of a tree node")
-    (:node/object ::c/one ::dt/ref "Git object (tree/blob) in a tree node")
-    (:file/name ::c/one ::dt/string :db.unique/identity "A filename")
+  [[:git/type "Type enum for git objects - one of :commit, :tree, :blob, :tag"
+    ::dt/keyword ::c/one :db/index]
+   [:git/sha "A git sha, should be in repo"
+    ::dt/string ::c/one :db.unique/identity]
+   [:repo/uri "A git repo uri"
+    ::dt/string ::c/one :db.unique/identity]
+   [:commit/parents "Parents of a commit"
+    ::dt/ref ::c/many :db/isComponent]
+   [:commit/tree "Root node of a commit"
+    ::dt/ref ::c/one :db/isComponent]
+   [:commit/committedAt "Timestamp of commit"
+    ::dt/instant ::c/one]
+   [:tree/nodes "Nodes of a git tree"
+    ::dt/ref ::c/many]
+   [:node/filename "filename of a tree node"
+    ::dt/ref ::c/one]
+   [:node/paths "paths of a tree node"
+    ::dt/ref ::c/many]
+   [:node/object "Git object (tree/blob) in a tree node"
+    ::dt/ref ::c/one :db/isComponent]
+   [:file/name "A filename"
+    ::dt/string ::c/one]
 
-    ;; git stuff, not like codeq
-    (:repo/branch ::c/many ::dt/ref "Named branch of a commit")
-    (:branch/name ::c/one ::dt/string :db.unique/identity
-                  "Name of a git repo's branch")
-    (:branch/tip ::c/one ::dt/ref "Commit this branch is currently pointing to")
+   ;; git stuff, not like codeq
+   [:repo/branch "Named branch of a commit"
+    ::dt/ref ::c/many]
+   [:branch/name "Name of a git repo's branch"
+    ::dt/string ::c/one]
+   [:branch/tip "Commit this branch is currently pointing to"
+    ::dt/ref ::c/one]
 
-    ;; lein version stuff
-    (:project-node/version ::c/one ::dt/ref
-                           "Lein semantic version declared in this project.clj")
-    (:lein-version ::c/one ::dt/string :db.unique/identity
-                   )
-
-
-   ])
-
+   ;; lein version stuff
+   [:project-node/version "Lein semantic version declared in this project.clj"
+    ::dt/ref ::c/one]
+   [:lein-version ""
+    ::dt/string ::c/one :db.unique/identity]])
 
 
 
@@ -949,6 +956,48 @@
   Example: lein voom retag-all-repos"
   [_]
   (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p)))))
+
+
+(defn git-commits
+  [gitdir branch]
+  (->
+   (git {:gitdir gitdir} "log" "--full-history" "--reverse" "--pretty=%H:%ct:%T:%P" branch)
+   :lines
+   (map #(let [[sha ctime tree parents] (s/split % #":")
+                            parents (when parents (s/split parents #" "))]
+                        (zipmap [:sha :ctime :tree :parents]
+                                [sha ctime tree parents])))))
+
+  (defn import-db
+    [gitdir]
+    (let [uri "datomic:mem://voom"
+          _ (d/delete-database uri)
+          _ (d/create-database uri)
+          conn (d/connect uri)
+          commits (git-commits gitdir "origin/master")
+          stxn (map gen-schema datomic-schema)
+          txn (apply concat
+                     (for [c commits
+                           :let [{:keys [sha ctime tree parents]} c
+                                 id (d/tempid :db.part/user)
+                                 cid (d/tempid :db.part/user)
+                                 tid (d/tempid :db.part/user)]]
+                       (concat
+                        [[:db/add id :git/type :commit]
+                         [:db/add id :git/sha sha]
+                         [:db/add id :commit/tree cid]
+                         [:db/add cid :node/object tid]
+                         [:db/add tid :git/type :tree]
+                         [:db/add tid :git/sha tree]]
+                        (apply concat
+                               (for [p parents
+                                     :let [pid (d/tempid :db.part/user)]]
+                                 [[:db/add pid :git/type :commit]
+                                  [:db/add pid :git/sha p]
+                                  [:db/add id :commit/parents pid]])))))]
+      @(d/transact conn stxn)
+      @(d/transact conn txn)
+      :done)))
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
                #'retag-all-repos #'ver-parse #'wrap])
