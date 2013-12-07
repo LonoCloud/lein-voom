@@ -960,7 +960,7 @@
 
 (defn git-commits
   [gitdir branch]
-  (->
+  (->>
    (git {:gitdir gitdir} "log" "--full-history" "--reverse" "--pretty=%H:%ct:%T:%P" branch)
    :lines
    (map #(let [[sha ctime tree parents] (s/split % #":")
