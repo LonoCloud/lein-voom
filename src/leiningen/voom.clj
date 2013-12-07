@@ -5,6 +5,7 @@
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.edn :as edn]
+            [clojure.data.fressian :as fress]
             [datomic.api :as d]
             [datomic.db :as db]
             [leiningen.core.project :as project]
@@ -1016,6 +1017,66 @@
   [gitdir tree-shas]
   (for [s tree-shas]
     {s (into {} (git-tree gitdir s))}))
+
+(defprotocol Sha
+  (get-byte-array [_])
+  (get-hex-string [_]))
+
+(deftype BytesSha [^bytes bytes]
+  Sha
+  (get-byte-array [_] bytes)
+  (get-hex-string [_] (.toString (java.math.BigInteger. bytes) 16))
+
+  Object
+  (toString [this] (get-hex-string this)))
+
+(defn str->sha [^String s]
+  (BytesSha. (.toByteArray (java.math.BigInteger. s 16))))
+
+;; [:commit/node <commit-sha> <ctime> <tree-sha>]
+;; [:commit/parent <commit-sha> <parent-commit-sha>]
+;; [:tree/node <tree-sha> :blob/:tree <filename> <object-sha>]
+(defn git-tuples
+  [gitdir]
+  (let [commits (git-commits gitdir "origin/master")]
+    (concat
+     (mapcat seq
+             (for [{:keys [sha ctime tree parents]} commits
+                   :let [bsha (str->sha sha)]]
+               (into [[:commit/node bsha ctime (str->sha tree)]]
+                     (for [p parents]
+                       [:commit/parent bsha (str->sha p)]))))
+     (for [tree-sha (all-git-trees gitdir)
+           :let [tree-bsha (str->sha tree-sha)]
+           [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
+       [:tree/node tree-bsha ftype fname (str->sha sha)]))))
+
+(def my-write-handlers
+  (-> (assoc fress/clojure-write-handlers
+        BytesSha
+        {"sha"
+         (reify org.fressian.handlers.WriteHandler
+           (write [this w sha]
+             (.writeTag w "sha" 1)
+             (.writeBytes w (get-byte-array sha))))})
+      fress/associative-lookup
+      fress/inheritance-lookup))
+
+(def my-read-handlers
+  (-> (assoc fress/clojure-read-handlers
+        "sha"
+        (reify org.fressian.handlers.ReadHandler
+          (read [_ rdr tag component-count]
+            (BytesSha. (.readObject rdr)))))
+      fress/associative-lookup))
+
+(defn fress-spit-seq
+  [filename coll]
+  (with-open [w (fress/create-writer (io/output-stream filename)
+                                     :handlers my-write-handlers)]
+    (fress/begin-open-list w)
+    (doseq [item coll]
+      (fress/write-object w item))))
 
 (defn import-db
   [gitdir]
