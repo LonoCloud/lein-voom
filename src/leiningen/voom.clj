@@ -1074,7 +1074,8 @@
 
 (defn fress-spit-seq
   [filename coll]
-  (with-open [w (fress/create-writer (io/output-stream filename)
+  (with-open [^org.fressian.FressianWriter w
+              , (fress/create-writer (io/output-stream filename)
                                      :handlers my-write-handlers)]
     (fress/begin-open-list w)
     (doseq [item coll]
