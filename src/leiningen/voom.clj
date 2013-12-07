@@ -1015,8 +1015,10 @@
 
 (defn git-trees
   [gitdir tree-shas]
-  (for [s tree-shas]
-    {s (into {} (git-tree gitdir s))}))
+  (into {}
+        (concat
+         (for [s tree-shas]
+           {s (git-tree gitdir s)}))))
 
 (defprotocol Sha
   (get-byte-array [_])
