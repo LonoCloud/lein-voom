@@ -1004,14 +1004,18 @@
         all-shas (concat pack-shas obj-shas)]
     all-shas))
 
+(defn git-tree
+  [gitdir tree-sha]
+  (into {}
+        (for [e (:lines (git {:gitdir gitdir} "cat-file" "-p" tree-sha))
+              :let [[_ ftype sha fname] (s/split (s/trim e) #"\s" 4)]]
+          [fname {:sha sha
+                  :ftype ftype}])))
+
 (defn git-trees
   [gitdir tree-shas]
   (for [s tree-shas]
-    {s (into {}
-             (for [e (:lines (git {:gitdir gitdir} "cat-file" "-p" s))
-                   :let [[_ ftype sha fname] (s/split (s/trim e) #"\s" 4)]]
-               [fname {:sha sha
-                       :ftype ftype}]))}))
+    {s (into {} (git-tree gitdir s))}))
 
 (defn import-db
   [gitdir]
