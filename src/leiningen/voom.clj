@@ -1035,6 +1035,15 @@
     @(d/transact conn txn)
     :done))
 
+(defn git-trees
+  [gitdir tree-shas]
+  (for [s tree-shas]
+    {s (into {}
+             (for [e (:lines (git {:gitdir gitdir} "cat-file" "-p" s))
+                   :let [[_ ftype sha fname] (s/split (s/trim e) #"\s" 4)]]
+               [fname {:sha sha
+                       :ftype ftype}]))}))
+
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
                #'retag-all-repos #'ver-parse #'wrap])
 
