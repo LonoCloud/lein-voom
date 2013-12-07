@@ -961,12 +961,12 @@
 (defn git-commits
   [gitdir branch]
   (->>
-   (git {:gitdir gitdir} "log" "--full-history" "--reverse" "--pretty=%H:%ct:%T:%P" branch)
+   (git {:gitdir gitdir} "log" "--full-history" "--reverse" "--pretty=%H,%ct,%T,%P" branch)
    :lines
-   (map #(let [[sha ctime tree parents] (s/split % #":")
-                            parents (when parents (s/split parents #" "))]
-                        (zipmap [:sha :ctime :tree :parents]
-                                [sha ctime tree parents])))))
+   (map #(let [[sha ctime tree parents] (s/split % #",")
+               parents (when parents (s/split parents #" "))]
+           (zipmap [:sha :ctime :tree :parents]
+                   [sha ctime tree parents])))))
 
 (defn filter-shas
   [otype shas]
