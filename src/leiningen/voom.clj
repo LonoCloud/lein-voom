@@ -8,6 +8,8 @@
             [clojure.data.fressian :as fress]
             [datomic.api :as d]
             [datomic.db :as db]
+            [clojure.core.logic.pldb :as pldb]
+            [clojure.core.logic :as l]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [org.satta.glob :refer [glob]]
@@ -1062,6 +1064,55 @@
            :let [tree-bsha (str->sha tree-sha)]
            [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
        [:tree/node tree-bsha ftype fname (str->sha sha)]))))
+
+(pldb/db-rel r-commit ^:index sha ctime tree-sha)
+(pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
+(pldb/db-rel r-tree ^:index sha name type ^:index obj-sha)
+(pldb/db-rel r-proj obj-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
+
+(defn git-logic-tuples
+  [gitdir]
+  (let [commits (git-commits gitdir "origin/master")]
+    (concat
+     (mapcat seq
+             (for [{:keys [sha ctime tree parents]} commits
+                   :let [bsha (str->sha sha)]]
+               (into [[:r-commit bsha ctime (str->sha tree)]]
+                     (for [p parents]
+                       [:r-commit-parent bsha (str->sha p)]))))
+     (for [tree-sha (all-git-trees gitdir)
+           :let [tree-bsha (str->sha tree-sha)]
+           [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
+       [:r-tree tree-bsha fname (keyword ftype) (str->sha sha)]))))
+
+(def rel-for-kw {:r-commit r-commit
+                 :r-commit-parent r-commit-parent
+                 :r-tree r-tree})
+(defn data->relation
+  [[rel-name & data]]
+  (cons (rel-for-kw rel-name) data))
+
+(comment
+  (time (fress-spit-seq "tmp.frs" (git-logic-tuples "<git repo>")))
+  (take 10 (filter #(= :r-tree (first %)) (fress/read "tmp.frs" :handlers my-read-handlers)))
+  (time (last (fress/read "tmp.frs" :handlers my-read-handlers)))
+  (time (def db (apply pldb/db
+                       (map data->relation
+                            (fress/read "tmp.frs" :handlers my-read-handlers)))))
+  (pldb/with-db db
+    (l/run 10 [sha]
+     (l/fresh [obj-sha]
+       (r-tree sha "project.clj" :blob obj-sha))))
+  (pldb/with-db db
+    (l/run* [filename]
+     (l/fresh [sha ftype]
+       (r-tree sha filename ftype (str->sha "7a317ed2bc19d4518d403f011a1f542b67e96ef")))))
+  (pldb/with-db db
+    (l/run 5 [dirname]
+            (l/fresh [obj-sha proj-dir-sha otherdir]
+                     (r-tree proj-dir-sha "project.clj" :blob obj-sha)
+                     (r-tree otherdir dirname :tree proj-dir-sha))))
+  )
 
 (def my-write-handlers
   (-> (assoc fress/clojure-write-handlers
