@@ -13,7 +13,8 @@
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
-           [java.util Date]
+           [java.util Date Arrays]
+           [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter]
            [java.util.logging Logger Handler Level]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
@@ -1024,15 +1025,24 @@
   (get-byte-array [_])
   (get-hex-string [_]))
 
+;; TODO: sub-sha match
+;; (= (str->sha "abcde") (str->sha "abcd"))
 (deftype BytesSha [^bytes bytes]
   Sha
   (get-byte-array [_] bytes)
   (get-hex-string [_] (.toString (java.math.BigInteger. bytes) 16))
 
   Object
-  (toString [this] (get-hex-string this)))
+  (toString [this] (get-hex-string this))
+  (hashCode [_]
+    (bit-or
+     (bit-shift-left (aget bytes 0) 8)
+     (bit-shift-left (aget bytes 1) 0)))
+  (equals [this o]
+    (and (satisfies? Sha o) (Arrays/equals bytes ^bytes (get-byte-array o)))))
 
 (defn str->sha [^String s]
+  (assert (<= 4 (count s)))
   (BytesSha. (.toByteArray (java.math.BigInteger. s 16))))
 
 ;; [:commit/node <commit-sha> <ctime> <tree-sha>]
