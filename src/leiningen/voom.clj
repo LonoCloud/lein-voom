@@ -1077,7 +1077,7 @@
 
 (defn rels->pldb
   [rels rel-data]
-  (let [rel-index-i (into {} (for [rel [r-tree r-branch]]
+  (let [rel-index-i (into {} (for [rel rels]
                                [(:rel-name (meta rel))
                                 (keep-indexed #(when %2 %1)
                                               (:indexes (meta rel)))]))]
