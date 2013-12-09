@@ -10,6 +10,7 @@
             [datomic.db :as db]
             [clojure.core.logic.pldb :as pldb]
             [clojure.core.logic :as l]
+            [clojure.core.reducers :as red]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [org.satta.glob :refer [glob]]
@@ -1066,6 +1067,7 @@
            [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
        [:tree/node tree-bsha ftype fname (str->sha sha)]))))
 
+(pldb/db-rel r-branch name sha)
 (pldb/db-rel r-commit ^:index sha ctime tree-sha)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
 (pldb/db-rel r-tree ^:index sha name type ^:index obj-sha)
@@ -1078,28 +1080,58 @@
      (mapcat seq
              (for [{:keys [sha ctime tree parents]} commits
                    :let [bsha (str->sha sha)]]
-               (into [[:r-commit bsha ctime (str->sha tree)]]
+               (into [[r-commit bsha ctime (str->sha tree)]]
                      (for [p parents]
-                       [:r-commit-parent bsha (str->sha p)]))))
+                       [r-commit-parent bsha (str->sha p)]))))
      (for [tree-sha (all-git-trees gitdir)
            :let [tree-bsha (str->sha tree-sha)]
            [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
-       [:r-tree tree-bsha fname (keyword ftype) (str->sha sha)]))))
+       [r-tree tree-bsha fname (keyword ftype) (str->sha sha)]))))
 
-(def rel-for-kw {:r-commit r-commit
-                 :r-commit-parent r-commit-parent
-                 :r-tree r-tree})
-(defn data->relation
-  [[rel-name & data]]
-  (cons (rel-for-kw rel-name) data))
+(defn pldb-rels
+  [db]
+  (for [[rel-name indexes] db]
+    [rel-name (::pldb/unindexed indexes)]))
+
+(defn rels->pldb
+  [rels rel-data]
+  (let [rel-index-i (into {} (for [rel [r-tree r-branch]]
+                               [(:rel-name (meta rel))
+                                (keep-indexed #(when %2 %1)
+                                              (:indexes (meta rel)))]))]
+    (reduce
+     (fn [db [rel-name unindexed]]
+       (let [unindexed (into #{} (red/map vec unindexed))]
+         (assoc db
+           rel-name
+           (into {::pldb/unindexed unindexed}
+                 (for [i (rel-index-i rel-name)]
+                   [i (persistent!
+                       (reduce (fn [index tuple]
+                                 (let [key (nth tuple i)]
+                                   (assoc! index key ((fnil conj #{})
+                                                      (get index key)
+                                                      tuple))))
+                               (transient {})
+                               unindexed))])))))
+     pldb/empty-db
+     rel-data)))
 
 (comment
-  (time (fress-spit-seq "tmp.frs" (git-logic-tuples "<git repo>")))
-  (take 10 (filter #(= :r-tree (first %)) (fress/read "tmp.frs" :handlers my-read-handlers)))
-  (time (last (fress/read "tmp.frs" :handlers my-read-handlers)))
-  (time (def db (apply pldb/db
-                       (map data->relation
-                            (fress/read "tmp.frs" :handlers my-read-handlers)))))
+  (def xdb1 (pldb/db [r-tree :a :b :c :d]))
+  (pldb/with-db xdb1 (l/run* [a] (r-tree a :b :c :d)))
+  (def xdb2 (rels->pldb [r-tree] (pldb-rels xdb1)))
+  (pldb/with-db xdb2 (l/run* [a] (r-tree a :b :c :d)))
+  (def xdb3 (rels->pldb [r-tree] (fress/read (fress/write (pldb-rels xdb1)))))
+  (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
+
+  (time (def db (apply pldb/db (git-logic-tuples "<git repo>"))))
+  (time (fress-spit-seq "tmp.frs" (pldb-rels db)))
+  (time (def db2
+          (rels->pldb [r-branch r-commit r-commit-parent r-tree r-proj]
+                      (fress/read "tmp.frs" :handlers my-read-handlers))))
+  (time (def x (fress/read "tmp.frs" :handlers my-read-handlers)))
+
   (pldb/with-db db
     (l/run 10 [sha]
      (l/fresh [obj-sha]
