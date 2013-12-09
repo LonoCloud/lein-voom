@@ -1099,6 +1099,15 @@
      pldb/empty-db
      rel-data)))
 
+(defn file-patho
+  [tree-sha so-far fname fsha tree-path]
+  (l/conde
+   [(r-tree tree-sha fname :blob fsha) (l/== so-far tree-path)]
+   [(l/fresh [next-path next-sha new-path]
+             (r-tree tree-sha next-path :tree next-sha)
+             (l/conso next-path so-far new-path)
+             (file-patho next-sha new-path fname fsha tree-path))]))
+
 (comment
   (def xdb1 (pldb/db [r-tree :a :b :c :d]))
   (pldb/with-db xdb1 (l/run* [a] (r-tree a :b :c :d)))
@@ -1113,6 +1122,19 @@
           (rels->pldb [r-branch r-commit r-commit-parent r-tree r-proj]
                       (fress/read "tmp.frs" :handlers my-read-handlers))))
   (time (def x (fress/read "tmp.frs" :handlers my-read-handlers)))
+
+  (time
+   (let [fname "core.clj"]
+     (doall
+      (pldb/with-db db
+        (l/run 10 [c-sha tree-path obj-sha]
+               (l/fresh [tree-sha ctime p-sha p-ctime p-tree-sha p-obj-sha]
+                        (r-commit c-sha ctime tree-sha)
+                        (r-commit-parent c-sha p-sha)
+                        (r-commit p-sha p-ctime p-tree-sha)
+                        (file-patho p-tree-sha nil fname p-obj-sha tree-path)
+                        (file-patho tree-sha nil fname obj-sha tree-path)
+                        (l/!= obj-sha p-obj-sha)))))))
 
   (pldb/with-db db
     (l/run 10 [sha]
