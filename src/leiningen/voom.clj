@@ -1040,11 +1040,9 @@
   Object
   (toString [this] (get-hex-string this))
   (hashCode [_]
-    (bit-or
-     (bit-shift-left (aget bytes 0) 8)
-     (bit-shift-left (aget bytes 1) 0)))
+    (bit-or (aget bytes 1) (bit-shift-left (aget bytes 0) 8)))
   (equals [this o]
-    (and (satisfies? Sha o) (Arrays/equals bytes ^bytes (get-byte-array o)))))
+    (and (instance? BytesSha o) (Arrays/equals bytes ^bytes (get-byte-array o)))))
 
 (defn str->sha [^String s]
   (assert (<= 4 (count s)))
