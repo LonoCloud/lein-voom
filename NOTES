@@ -46,3 +46,11 @@ NEEDS:
 
 Ideas:
 - Use this for parallel build progress indication: ▁ ▂ ▃ ▄ ▅ ▆ ▇ █
+
+    | | | | | +-----
+    | | | | | | +---
+    | | | | | | | +-
+    v v v v v v v v
+    ▁ ▂ ▃ ▄ ▅ ▆ ▇ █
+
+    Or maybe: http://chrislesage.com/writing/a-manual-progress-bar-in-scrivener/
