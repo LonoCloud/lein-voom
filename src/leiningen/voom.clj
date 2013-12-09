@@ -92,6 +92,9 @@
    [:branch/tip "Commit this branch is currently pointing to"
     ::dt/ref ::c/one]
 
+   [:node/name-sha "A concatenation of the name and the sha for upsert."
+    ::dt/string ::c/one :db.unique/identity]
+
    ;; lein version stuff
    [:project-node/version "Lein semantic version declared in this project.clj"
     ::dt/ref ::c/one]
@@ -1168,9 +1171,25 @@
                                    :let [pid (d/tempid :db.part/user)]]
                                [[:db/add pid :git/type :commit]
                                 [:db/add pid :git/sha p]
-                                [:db/add id :commit/parents pid]])))))]
-    @(d/transact conn stxn)
-    @(d/transact conn txn)
+                                [:db/add id :commit/parents pid]])))))
+        trees (git-trees gitdir (all-git-trees gitdir))
+        ttxn (apply concat
+                    (for [[tsha entries] trees
+                          [fname {:keys [sha ftype]}] entries
+                          :let [[tid nid oid fid]
+                                , (repeatedly #(d/tempid :db.part/user))]]
+                      [[:db/add tid :git/sha tsha]
+                       [:db/add tid :git/type :tree]
+                       [:db/add tid :tree/nodes nid]
+                       [:db/add nid :node/name-sha (str tsha "-" fname)]
+                       [:db/add nid :node/object oid]
+                       [:db/add nid :node/filename fid]
+                       [:db/add fid :file/name fname]
+                       [:db/add oid :git/sha sha]
+                       [:db/add oid :git/type (keyword ftype)]]))]
+    (time @(d/transact conn stxn))
+    (time @(d/transact conn txn))
+    (time @(d/transact conn ttxn))
     :done))
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
