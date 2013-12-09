@@ -1049,24 +1049,6 @@
   (assert (<= 4 (count s)))
   (BytesSha. (.toByteArray (java.math.BigInteger. s 16))))
 
-;; [:commit/node <commit-sha> <ctime> <tree-sha>]
-;; [:commit/parent <commit-sha> <parent-commit-sha>]
-;; [:tree/node <tree-sha> :blob/:tree <filename> <object-sha>]
-(defn git-tuples
-  [gitdir]
-  (let [commits (git-commits gitdir "origin/master")]
-    (concat
-     (mapcat seq
-             (for [{:keys [sha ctime tree parents]} commits
-                   :let [bsha (str->sha sha)]]
-               (into [[:commit/node bsha ctime (str->sha tree)]]
-                     (for [p parents]
-                       [:commit/parent bsha (str->sha p)]))))
-     (for [tree-sha (all-git-trees gitdir)
-           :let [tree-bsha (str->sha tree-sha)]
-           [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
-       [:tree/node tree-bsha ftype fname (str->sha sha)]))))
-
 (pldb/db-rel r-branch name sha)
 (pldb/db-rel r-commit ^:index sha ctime tree-sha)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
