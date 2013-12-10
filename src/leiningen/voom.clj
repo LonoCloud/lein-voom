@@ -13,13 +13,15 @@
             [clojure.core.reducers :as red]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
+            [leiningen.voom.bytes-sha :as bs]
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
-           [java.util Date Arrays]
+           [java.util Date]
            [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter]
            [java.util.logging Logger Handler Level]
+           [leiningen.voom.bytes_sha BytesSha]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
@@ -1027,25 +1029,6 @@
          (for [s tree-shas]
            {s (git-tree gitdir s)}))))
 
-(when-not (resolve 'Sha)
-  (defprotocol Sha
-    (get-byte-array [_])
-    (get-hex-string [_]))
-
-  ;; TODO: sub-sha match
-  ;; (= (str->sha "abcde") (str->sha "abcd"))
-  (deftype BytesSha [^bytes bytes]
-    Sha
-    (get-byte-array [_] bytes)
-    (get-hex-string [_] (.toString (java.math.BigInteger. bytes) 16))
-
-    Object
-    (toString [this] (get-hex-string this))
-    (hashCode [_]
-      (bit-or (aget bytes 1) (bit-shift-left (aget bytes 0) 8)))
-    (equals [this o]
-      (and (instance? Sha o) (Arrays/equals bytes ^bytes (get-byte-array o))))))
-
 (defn str->sha [^String s]
   (assert (<= 4 (count s)))
   (BytesSha. (.toByteArray (java.math.BigInteger. s 16))))
@@ -1159,7 +1142,7 @@
          (reify org.fressian.handlers.WriteHandler
            (write [this w sha]
              (.writeTag w "sha" 1)
-             (.writeBytes w (get-byte-array sha))))})
+             (.writeBytes w (bs/get-byte-array sha))))})
       fress/associative-lookup
       fress/inheritance-lookup))
 
