@@ -1036,7 +1036,7 @@
 (pldb/db-rel r-branch name sha)
 (pldb/db-rel r-commit ^:index sha ctime tree-sha)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
-(pldb/db-rel r-tree ^:index sha name type ^:index obj-sha)
+(pldb/db-rel r-tree ^:index sha ^:index name type ^:index obj-sha)
 (pldb/db-rel r-proj obj-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
 
 (defn git-logic-tuples
