@@ -7,9 +7,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[clj-glob "1.0.0"]
                  [org.clojure/data.fressian "0.2.0"]
-                 [org.clojure/core.logic "0.8.6-SNAPSHOT"]
-                 [com.datomic/datomic-free "0.9.4324"
-                  :exclusions [org.slf4j/slf4j-nop org.slf4j/slf4j-log4j12]]]
+                 [org.clojure/core.logic "0.8.6-SNAPSHOT"]]
   :signing {:gpg-key "A4D5C342"}
   :repositories [["sonatype-snapshot" "http://oss.sonatype.org/content/repositories/snapshots"]]
   :eval-in-leiningen true)

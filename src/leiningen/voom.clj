@@ -6,8 +6,6 @@
             [clojure.set :as set]
             [clojure.edn :as edn]
             [clojure.data.fressian :as fress]
-            [datomic.api :as d]
-            [datomic.db :as db]
             [clojure.core.logic.pldb :as pldb]
             [clojure.core.logic :as l]
             [leiningen.core.project :as project]
@@ -24,85 +22,6 @@
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
-
-;;=== namespace aliases, mainly for use with datomic ===
-(alias 'v 'leiningen.voom)
-(create-ns 'db.type) (alias 'dt 'db.type)
-(create-ns 'db.cardinality) (alias 'c 'db.cardinality)
-
-(def ns-key
-  {"db.type" :db/valueType
-   "db.cardinality" :db/cardinality
-   "db.unique" :db/unique})
-
-;;=== local types ===
-
-(defn reduce-schema-item [m item]
-  (if-let [k (and (keyword? item) (ns-key (namespace item)))]
-    (assoc m k item)
-    (cond
-     (string? item) (assoc m :db/doc item)
-     (instance? Seqable item) (let [[fn-op params & code] item]
-                                (-> m
-                                  (dissoc :db/cardinality :db.install/_attribute)
-                                  (assoc :db/fn (datomic.function/construct
-                                                 {:lang "clojure"
-                                                  :params params
-                                                  :code (cons 'do code)}))))
-     :else (assoc m item true))))
-
-(defn gen-schema [[id & more]]
-  (reduce reduce-schema-item
-          {:db/id (db/id-literal [:db.part/db])
-           :db/ident id
-           :db/cardinality ::c/one
-           :db.install/_attribute :db.part/db}
-          more))
-
-;;=== datomic schema ===
-
-(def datomic-schema
-  ;; git stuff, named like codeq
-  [[:git/type "Type enum for git objects - one of :commit, :tree, :blob, :tag"
-    ::dt/keyword ::c/one :db/index]
-   [:git/sha "A git sha, should be in repo"
-    ::dt/string ::c/one :db.unique/identity]
-   [:repo/uri "A git repo uri"
-    ::dt/string ::c/one :db.unique/identity]
-   [:commit/parents "Parents of a commit"
-    ::dt/ref ::c/many :db/isComponent]
-   [:commit/tree "Root node of a commit"
-    ::dt/ref ::c/one :db/isComponent]
-   [:commit/committedAt "Timestamp of commit"
-    ::dt/instant ::c/one]
-   [:tree/nodes "Nodes of a git tree"
-    ::dt/ref ::c/many]
-   [:node/filename "filename of a tree node"
-    ::dt/ref ::c/one]
-   [:node/paths "paths of a tree node"
-    ::dt/ref ::c/many]
-   [:node/object "Git object (tree/blob) in a tree node"
-    ::dt/ref ::c/one :db/isComponent]
-   [:file/name "A filename"
-    ::dt/string ::c/one]
-
-   ;; git stuff, not like codeq
-   [:repo/branch "Named branch of a commit"
-    ::dt/ref ::c/many]
-   [:branch/name "Name of a git repo's branch"
-    ::dt/string ::c/one]
-   [:branch/tip "Commit this branch is currently pointing to"
-    ::dt/ref ::c/one]
-
-   [:node/name-sha "A concatenation of the name and the sha for upsert."
-    ::dt/string ::c/one :db.unique/identity]
-
-   ;; lein version stuff
-   [:project-node/version "Lein semantic version declared in this project.clj"
-    ::dt/ref ::c/one]
-   [:lein-version ""
-    ::dt/string ::c/one :db.unique/identity]])
-
 
 
 ;;=== FIFO and shell functions ===
@@ -996,42 +915,6 @@
            (zipmap [:sha :ctime :tree :parents]
                    [sha ctime tree parents])))))
 
-(defn filter-shas
-  [otype shas]
-  (-> shas
-   (->>
-    (map #(take 2 (s/split % #" " 3)))
-    (apply concat)
-    (apply hash-map)
-    (group-by val))
-   (get otype)
-   (->> (map first))))
-
-(defn all-git-trees
-  [gitdir]
-  (let [g {:gitdir gitdir}
-        pack-files (glob (str gitdir "/.git/objects/pack/*"))
-        pack-shas (->>
-                   pack-files
-                   (apply git g "verify-pack" "-v")
-                   :lines
-                   (filter-shas "tree"))
-        obj-files (glob (str gitdir "/.git/objects/??/*"))
-        all-obj-shas (for [f obj-files]
-                   (->>
-                    (s/split (.getPath ^File f) #"/")
-                    rseq
-                    (take 2)
-                    reverse
-                    (apply str)))
-        obj-shas (->>
-                  (git (assoc g :sh-opts [:in (s/join "\n" all-obj-shas)])
-                       "cat-file" "--batch-check=%(objectname) %(objecttype)")
-                  :lines
-                  (filter-shas "tree"))
-        all-shas (concat pack-shas obj-shas)]
-    all-shas))
-
 (defn git-tree
   [gitdir tree-sha]
   (into {}
@@ -1039,13 +922,6 @@
               :let [[_ ftype sha fname] (s/split (s/trim e) #"\s" 4)]]
           [fname {:sha sha
                   :ftype ftype}])))
-
-(defn git-trees
-  [gitdir tree-shas]
-  (into {}
-        (concat
-         (for [s tree-shas]
-           {s (git-tree gitdir s)}))))
 
 
 (pldb/db-rel r-branch name sha)
@@ -1253,52 +1129,6 @@
     (doseq [item coll]
       (fress/write-object w item))))
 
-(defn import-db
-  [gitdir]
-  (let [uri "datomic:mem://voom"
-        _ (d/delete-database uri)
-        _ (d/create-database uri)
-        conn (d/connect uri)
-        commits (git-commits gitdir "origin/master")
-        stxn (map gen-schema datomic-schema)
-        txn (apply concat
-                   (for [c commits
-                         :let [{:keys [sha ctime tree parents]} c
-                               id (d/tempid :db.part/user)
-                               cid (d/tempid :db.part/user)
-                               tid (d/tempid :db.part/user)]]
-                     (concat
-                      [[:db/add id :git/type :commit]
-                       [:db/add id :git/sha sha]
-                       [:db/add id :commit/tree cid]
-                       [:db/add cid :node/object tid]
-                       [:db/add tid :git/type :tree]
-                       [:db/add tid :git/sha tree]]
-                      (apply concat
-                             (for [p parents
-                                   :let [pid (d/tempid :db.part/user)]]
-                               [[:db/add pid :git/type :commit]
-                                [:db/add pid :git/sha p]
-                                [:db/add id :commit/parents pid]])))))
-        trees (git-trees gitdir (all-git-trees gitdir))
-        ttxn (apply concat
-                    (for [[tsha entries] trees
-                          [fname {:keys [sha ftype]}] entries
-                          :let [[tid nid oid fid]
-                                , (repeatedly #(d/tempid :db.part/user))]]
-                      [[:db/add tid :git/sha tsha]
-                       [:db/add tid :git/type :tree]
-                       [:db/add tid :tree/nodes nid]
-                       [:db/add nid :node/name-sha (str tsha "-" fname)]
-                       [:db/add nid :node/object oid]
-                       [:db/add nid :node/filename fid]
-                       [:db/add fid :file/name fname]
-                       [:db/add oid :git/sha sha]
-                       [:db/add oid :git/type (keyword ftype)]]))]
-    (time @(d/transact conn stxn))
-    (time @(d/transact conn txn))
-    (time @(d/transact conn ttxn))
-    :done))
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
                #'retag-all-repos #'ver-parse #'wrap])
