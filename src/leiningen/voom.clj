@@ -13,7 +13,7 @@
             [clojure.core.reducers :as red]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
-            [leiningen.voom.bytes-sha :as bs]
+            [leiningen.voom.long-sha :as sha :only [mk]]
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
@@ -21,7 +21,6 @@
            [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter]
            [java.util.logging Logger Handler Level]
-           [leiningen.voom.bytes_sha BytesSha]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
@@ -1044,9 +1043,6 @@
          (for [s tree-shas]
            {s (git-tree gitdir s)}))))
 
-(defn str->sha [^String s]
-  (assert (<= 4 (count s)))
-  (BytesSha. (.toByteArray (java.math.BigInteger. s 16))))
 
 (pldb/db-rel r-branch name sha)
 (pldb/db-rel r-commit ^:index sha ctime tree-sha)
@@ -1060,14 +1056,14 @@
     (concat
      (mapcat seq
              (for [{:keys [sha ctime tree parents]} commits
-                   :let [bsha (str->sha sha)]]
-               (into [[r-commit bsha ctime (str->sha tree)]]
+                   :let [bsha (sha/mk sha)]]
+               (into [[r-commit bsha ctime (sha/mk tree)]]
                      (for [p parents]
-                       [r-commit-parent bsha (str->sha p)]))))
+                       [r-commit-parent bsha (sha/mk p)]))))
      (for [tree-sha (all-git-trees gitdir)
-           :let [tree-bsha (str->sha tree-sha)]
+           :let [tree-bsha (sha/mk tree-sha)]
            [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
-       [r-tree tree-bsha fname (keyword ftype) (str->sha sha)]))))
+       [r-tree tree-bsha fname (keyword ftype) (sha/mk sha)]))))
 
 (defn pldb-rels
   [db]
@@ -1148,6 +1144,8 @@
        blobs-to-read))))
 
 (comment
+  (l/run* [q] (l/fresh [q] (l/== (sha/mk "7b3e68a8839aeb4")
+                                 (sha/mk "7b3e68a8839aeb4"))))
   (def xdb1 (pldb/db [r-tree :a :b :c :d]))
   (pldb/with-db xdb1 (l/run* [a] (r-tree a :b :c :d)))
   (def xdb2 (rels->pldb [r-tree] (pldb-rels xdb1)))
@@ -1160,8 +1158,8 @@
   (time (fress-spit-seq "tmp.frs" (pldb-rels db2)))
   (time (def db3
           (rels->pldb [r-branch r-commit r-commit-parent r-tree r-proj]
-                      (fress/read "tmp.frs" :handlers my-read-handlers))))
-  (time (def x (fress/read "tmp.frs" :handlers my-read-handlers)))
+                      (fress/read "tmp.frs" :handlers sha/read-handlers))))
+  (time (def x (fress/read "tmp.frs" :handlers sha/read-handlers)))
 
   (time
    (let [fname "core.clj"]
@@ -1177,8 +1175,8 @@
                         (l/!= obj-sha p-obj-sha)))))))
 
   (time
-   (let [c (str->sha "612e0705de7ff991aa65b910ed0820adabd1d921") ; for large test repo
-         p (str->sha "65691217cd9aa2b2738518dbebd3fdc7d58b162f")]
+   (let [c (sha/mk "612e0705de7ff991aa65b910ed0820adabd1d921") ; for large test repo
+         p (sha/mk "65691217cd9aa2b2738518dbebd3fdc7d58b162f")]
      (doall
       (pldb/with-db db
         (l/run 1 [q]
@@ -1186,14 +1184,14 @@
                (l/== q true))))))
 
   (pldb/with-db db3
-    (l/run 10 [sha]
-     (l/fresh [obj-sha]
+    (l/run 10 [obj-sha]
+     (l/fresh [sha]
        (r-tree sha "project.clj" :blob obj-sha))))
 
   (pldb/with-db db3
     (l/run* [filename]
      (l/fresh [sha ftype]
-       (r-tree sha filename ftype (str->sha "7b3e68a8839aeb4")))))
+       (r-tree sha filename ftype (sha/mk "065ed5d8b4f7aca")))))
   (pldb/with-db db3
     (l/run 5 [dirname]
             (l/fresh [obj-sha proj-dir-sha otherdir]
@@ -1206,30 +1204,11 @@
                     (l/== q [a b c d e f g]))))
   )
 
-(def my-write-handlers
-  (-> (assoc fress/clojure-write-handlers
-        BytesSha
-        {"sha"
-         (reify org.fressian.handlers.WriteHandler
-           (write [this w sha]
-             (.writeTag w "sha" 1)
-             (.writeBytes w (bs/get-byte-array sha))))})
-      fress/associative-lookup
-      fress/inheritance-lookup))
-
-(def my-read-handlers
-  (-> (assoc fress/clojure-read-handlers
-        "sha"
-        (reify org.fressian.handlers.ReadHandler
-          (read [_ rdr tag component-count]
-            (BytesSha. (.readObject rdr)))))
-      fress/associative-lookup))
-
 (defn fress-spit-seq
   [filename coll]
   (with-open [^org.fressian.FressianWriter w
               , (fress/create-writer (io/output-stream filename)
-                                     :handlers my-write-handlers)]
+                                     :handlers sha/write-handlers)]
     (fress/begin-open-list w)
     (doseq [item coll]
       (fress/write-object w item))))
