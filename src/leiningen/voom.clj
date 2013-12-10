@@ -1048,18 +1048,20 @@
 (pldb/db-rel r-commit ^:index sha ctime tree-sha)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
 (pldb/db-rel r-tree ^:index sha ^:index name type ^:index obj-sha)
-(pldb/db-rel r-proj obj-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
+(pldb/db-rel r-proj ^:index blob-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
 
 (defn git-logic-tuples
   [gitdir]
   (let [commits (git-commits gitdir "origin/master")]
     (concat
+     ;; Graph of commits
      (mapcat seq
              (for [{:keys [sha ctime tree parents]} commits
                    :let [bsha (sha/mk sha)]]
-               (into [[r-commit bsha ctime (sha/mk tree)]]
+               (into [[r-commit bsha (Long/parseLong ctime) (sha/mk tree)]]
                      (for [p parents]
                        [r-commit-parent bsha (sha/mk p)]))))
+     ;; Trees (you know, files and directories)
      (for [tree-sha (all-git-trees gitdir)
            :let [tree-bsha (sha/mk tree-sha)]
            [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
