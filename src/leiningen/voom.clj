@@ -1054,22 +1054,117 @@
 (pldb/db-rel r-tree ^:index sha ^:index name type ^:index obj-sha)
 (pldb/db-rel r-proj ^:index blob-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
 
-(defn git-logic-tuples
-  [gitdir]
-  (let [commits (git-commits gitdir "origin/master")]
-    (concat
-     ;; Graph of commits
-     (mapcat seq
-             (for [{:keys [sha ctime tree parents]} commits
-                   :let [bsha (sha/mk sha)]]
-               (into [[r-commit bsha (Long/parseLong ctime) (sha/mk tree)]]
-                     (for [p parents]
-                       [r-commit-parent bsha (sha/mk p)]))))
-     ;; Trees (you know, files and directories)
-     (for [tree-sha (all-git-trees gitdir)
-           :let [tree-bsha (sha/mk tree-sha)]
-           [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
-       [r-tree tree-bsha fname (keyword ftype) (sha/mk sha)]))))
+(defn sem-ver-parse [ver-str]
+  (let [vparts (re-matches #"(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)-)?(.*)" ver-str)
+        [vqual & vnums] (reverse (filter identity (next vparts)))
+        [vmajor vminor vinc] (map #(if (and (string? %) (re-matches #"[0-9]*" %))
+                                     (Integer/parseInt %)
+                                     %) (reverse vnums))]
+    [vmajor vminor vinc vqual]))
+
+(defn reduce-db
+  [db coll f]
+  (if (empty? coll)
+    db
+    (reduce f (vary-meta db assoc ::dirty true) coll)))
+
+(defn add-r-commits
+  [db gitdir]
+  (let [old-branches (pldb/with-db db
+                       (l/run* [q]
+                               (l/fresh [name sha]
+                                        (r-branch name sha)
+                                        (l/== q [name sha]))))
+        db-without-branches (reduce
+                             (fn [db [name sha]]
+                               (pldb/db-retraction db r-branch name sha))
+                             db old-branches)
+        new-branches (map list
+                          (origin-branches gitdir)
+                          (origin-branches gitdir :sha? true))
+        log-args (concat (map second new-branches)
+                         (map #(str "^" %) (map second old-branches)))
+        db (reduce
+            (fn [db [name sha]]
+              (pldb/db-fact db r-branch name (sha/mk sha)))
+            db new-branches)]
+    ;; TODO -- dirty db on branch change
+    (reduce-db
+     db (apply git-commits gitdir log-args)
+     (fn [db {:keys [sha ctime tree parents]}]
+       (let [bsha (sha/mk sha)
+             db (pldb/db-fact db r-commit
+                              bsha
+                              (Date. (* 1000 (Long/parseLong ctime)))
+                              (sha/mk tree))]
+         (reduce (fn [db parent]
+                   (pldb/db-fact db r-commit-parent bsha (sha/mk parent)))
+                 db parents))))))
+
+(defn add-r-trees
+  [db gitdir]
+  (let [[trees read-trees]
+        (pldb/with-db db
+          [(l/run* [tree-sha] (l/fresh [sha ct] (r-commit sha ct tree-sha)))
+           (l/run* [tree-sha]
+                   (l/fresh [fname ftype obj-sha]
+                            (r-tree tree-sha fname ftype obj-sha)))])
+        tree-shas (apply disj (set trees) read-trees)]
+    (if (empty? tree-shas)
+      db ;; nothing to do
+      (loop [db (vary-meta db assoc ::dirty true)
+             tree-shas tree-shas]
+        (if (empty? tree-shas)
+          db ;; done
+          (let [tree (first tree-shas)
+                more-trees (disj tree-shas tree)]
+            (if (seq (l/run 1 [n] (l/fresh [t s] (r-tree tree n t s))))
+              (recur db more-trees) ;; this tree is done already
+              (let [sub-trees (git-tree gitdir (str tree))
+                    db (reduce
+                        (fn [db [fname {:keys [sha ftype]}]]
+                          (pldb/db-fact db r-tree tree fname
+                                        (keyword ftype) (sha/mk sha)))
+                        db
+                        sub-trees)
+                    more-trees (into more-trees
+                                     (keep (fn [[_ {:keys [ftype sha]}]]
+                                             (when (= "tree" ftype)
+                                               (sha/mk sha)))
+                                          sub-trees))]
+                (recur db more-trees)))))))))
+
+(defn add-r-projs
+  [db gitdir]
+  (let [[proj-blobs read-blobs]
+        (pldb/with-db db
+          [(l/run* [blob-sha]
+                   (l/fresh [proj-dir-sha]
+                            (r-tree proj-dir-sha "project.clj" :blob blob-sha)))
+           (l/run* [blob-sha]
+                   (l/fresh [proj-name vmajor vminor vinc vqual has-snaps?]
+                            (r-proj blob-sha proj-name
+                                    vmajor vminor vinc vqual has-snaps?)))])]
+    (reduce-db
+     db (apply disj (set proj-blobs) read-blobs)
+     (fn [db blob-sha]
+       (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
+         (let [proj-name (symbol (:group proj) (:name proj))
+               has-snaps? (some #(.contains ^String % "-SNAPSHOT")
+                                (map second (:dependencies proj)))
+               [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
+           (pldb/db-fact db r-proj blob-sha proj-name
+                         vmajor vminor vinc vqual has-snaps?))
+         db)))))
+
+(defn update-git-db
+  [db gitdir]
+  (let [db (-> db
+               (add-r-commits gitdir)
+               (add-r-trees gitdir)
+               (add-r-projs gitdir))]
+    ;; TODO: if dirty, write out db
+    db))
 
 (defn file-patho
   [tree-sha so-far fname fsha tree-path]
@@ -1088,38 +1183,6 @@
                      (r-commit-parent childer nparent)
                      (ancestoro nparent parenter))])))
 
-(defn sem-ver-parse [ver-str]
-  (let [vparts (re-matches #"(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)-)?(.*)" ver-str)
-        [vqual & vnums] (reverse (filter identity (next vparts)))
-        [vmajor vminor vinc] (map #(if (and (string? %) (re-matches #"[0-9]*" %))
-                                     (Integer/parseInt %)
-                                     %) (reverse vnums))]
-    [vmajor vminor vinc vqual]))
-
-(defn add-r-projs
-  [gitdir db]
-  (pldb/with-db db
-    (let [proj-blobs (l/run* [blob-sha]
-                       (l/fresh [proj-dir-sha]
-                         (r-tree proj-dir-sha "project.clj" :blob blob-sha)))
-          read-blobs (l/run* [blob-sha]
-                       (l/fresh [proj-name vmajor vminor vinc vqual has-snaps?]
-                         (r-proj blob-sha proj-name
-                                 vmajor vminor vinc vqual has-snaps?)))
-          blobs-to-read (apply disj (set proj-blobs) read-blobs)]
-      (reduce
-       (fn [db blob-sha]
-         (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
-           (let [proj-name (symbol (:group proj) (:name proj))
-                 has-snaps? (some #(.contains ^String % "-SNAPSHOT")
-                                  (map second (:dependencies proj)))
-                 [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
-             (pldb/db-fact db r-proj blob-sha proj-name
-                           vmajor vminor vinc vqual has-snaps?))
-           db))
-       db
-       blobs-to-read))))
-
 (comment
   (l/run* [q] (l/fresh [q] (l/== (sha/mk "7b3e68a8839aeb4")
                                  (sha/mk "7b3e68a8839aeb4"))))
@@ -1130,8 +1193,8 @@
   (def xdb3 (vdb/from-reldata [r-tree] (fress/read (fress/write (vdb/to-reldata xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
-  (time (def db (apply pldb/db (git-logic-tuples (io/file voom-repos "lein-voom")))))
-  (time (def db2 (add-r-projs (io/file voom-repos "lein-voom") db)))
+  (time (def db (update-git-db pldb/empty-db (io/file voom-repos "lein-voom"))))
+  (time (def db2 (update-git-db db (io/file voom-repos "lein-voom"))))
   (time (fress-spit-seq "tmp.frs" (vdb/to-reldata db2)))
   (time (def db3
           (vdb/from-reldata [r-branch r-commit r-commit-parent r-tree r-proj]
