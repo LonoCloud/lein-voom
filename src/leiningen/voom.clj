@@ -1092,6 +1092,14 @@
              (l/conso next-path so-far new-path)
              (file-patho next-sha new-path fname fsha tree-path))]))
 
+(def ancestoro
+  (l/tabled [childer parenter ancestor?]
+          (l/conde
+           [(r-commit-parent childer parenter) (l/== ancestor? true)]
+           [(l/fresh [nparent]
+                     (r-commit-parent childer nparent)
+                     (ancestoro nparent parenter ancestor?))])))
+
 (comment
   (def xdb1 (pldb/db [r-tree :a :b :c :d]))
   (pldb/with-db xdb1 (l/run* [a] (r-tree a :b :c :d)))
@@ -1120,10 +1128,14 @@
                         (file-patho tree-sha nil fname obj-sha tree-path)
                         (l/!= obj-sha p-obj-sha)))))))
 
-  (pldb/with-db db
-    (l/run 10 [sha]
-     (l/fresh [obj-sha]
-       (r-tree sha "project.clj" :blob obj-sha))))
+  (time
+   (let [c (str->sha "612e0705de7ff991aa65b910ed0820adabd1d921") ; for large test repo
+         p (str->sha "65691217cd9aa2b2738518dbebd3fdc7d58b162f")]
+     (doall
+      (pldb/with-db db
+        (l/run 10 [q]
+               (ancestoro c p q))))))
+
   (pldb/with-db db
     (l/run* [filename]
      (l/fresh [sha ftype]
