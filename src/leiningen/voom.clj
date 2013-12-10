@@ -446,6 +446,21 @@
       (when-not (= 128 (:exit (ex-data e)))
         (println "Ignoring error:" (pr-str e)))
       nil)))
+(defn robust-read-proj-blob
+  [gitdir blob-sha]
+  ;; Hack to work around crazy project.clj files
+  (binding [slurp (patch-fn slurp "{}")
+            load-file (patch-fn load-file {})]
+    (let [tmp-file (File/createTempFile ".project-" ".clj")]
+      (try
+        (spit tmp-file
+              (:out (git {:gitdir gitdir} "cat-file" "-p" (str blob-sha))))
+        (project/read (str tmp-file))
+        (catch Exception e
+          ;; It was really just a best effort anyway. Silently ignore.
+          nil)
+        (finally
+         (.delete tmp-file))))))
 
 (defn origin-branches
   [gitdir]
@@ -1100,6 +1115,38 @@
                      (r-commit-parent childer nparent)
                      (ancestoro nparent parenter))])))
 
+(defn sem-ver-parse [ver-str]
+  (let [vparts (re-matches #"(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)-)?(.*)" ver-str)
+        [vqual & vnums] (reverse (filter identity (next vparts)))
+        [vmajor vminor vinc] (map #(if (and (string? %) (re-matches #"[0-9]*" %))
+                                     (Integer/parseInt %)
+                                     %) (reverse vnums))]
+    [vmajor vminor vinc vqual]))
+
+(defn add-r-projs
+  [gitdir db]
+  (pldb/with-db db
+    (let [proj-blobs (l/run* [blob-sha]
+                       (l/fresh [proj-dir-sha]
+                         (r-tree proj-dir-sha "project.clj" :blob blob-sha)))
+          read-blobs (l/run* [blob-sha]
+                       (l/fresh [proj-name vmajor vminor vinc vqual has-snaps?]
+                         (r-proj blob-sha proj-name
+                                 vmajor vminor vinc vqual has-snaps?)))
+          blobs-to-read (apply disj (set proj-blobs) read-blobs)]
+      (reduce
+       (fn [db blob-sha]
+         (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
+           (let [proj-name (symbol (:group proj) (:name proj))
+                 has-snaps? (some #(.contains ^String % "-SNAPSHOT")
+                                  (map second (:dependencies proj)))
+                 [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
+             (pldb/db-fact db r-proj blob-sha proj-name
+                           vmajor vminor vinc vqual has-snaps?))
+           db))
+       db
+       blobs-to-read))))
+
 (comment
   (def xdb1 (pldb/db [r-tree :a :b :c :d]))
   (pldb/with-db xdb1 (l/run* [a] (r-tree a :b :c :d)))
@@ -1108,9 +1155,10 @@
   (def xdb3 (rels->pldb [r-tree] (fress/read (fress/write (pldb-rels xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
-  (time (def db (apply pldb/db (git-logic-tuples "<git repo>"))))
-  (time (fress-spit-seq "tmp.frs" (pldb-rels db)))
-  (time (def db2
+  (time (def db (apply pldb/db (git-logic-tuples (io/file voom-repos "lein-voom")))))
+  (time (def db2 (add-r-projs (io/file voom-repos "lein-voom") db)))
+  (time (fress-spit-seq "tmp.frs" (pldb-rels db2)))
+  (time (def db3
           (rels->pldb [r-branch r-commit r-commit-parent r-tree r-proj]
                       (fress/read "tmp.frs" :handlers my-read-handlers))))
   (time (def x (fress/read "tmp.frs" :handlers my-read-handlers)))
@@ -1118,7 +1166,7 @@
   (time
    (let [fname "core.clj"]
      (doall
-      (pldb/with-db db
+      (pldb/with-db db3
         (l/run 10 [c-sha tree-path obj-sha]
                (l/fresh [tree-sha ctime p-sha p-ctime p-tree-sha p-obj-sha]
                         (r-commit c-sha ctime tree-sha)
@@ -1137,15 +1185,25 @@
                (ancestoro c p)
                (l/== q true))))))
 
-  (pldb/with-db db
+  (pldb/with-db db3
+    (l/run 10 [sha]
+     (l/fresh [obj-sha]
+       (r-tree sha "project.clj" :blob obj-sha))))
+
+  (pldb/with-db db3
     (l/run* [filename]
      (l/fresh [sha ftype]
-       (r-tree sha filename ftype (str->sha "7a317ed2bc19d4518d403f011a1f542b67e96ef")))))
-  (pldb/with-db db
+       (r-tree sha filename ftype (str->sha "7b3e68a8839aeb4")))))
+  (pldb/with-db db3
     (l/run 5 [dirname]
             (l/fresh [obj-sha proj-dir-sha otherdir]
                      (r-tree proj-dir-sha "project.clj" :blob obj-sha)
                      (r-tree otherdir dirname :tree proj-dir-sha))))
+  (pldb/with-db db3
+    (l/run 5 [q]
+           (l/fresh [a b c d e f g]
+                    (r-proj a b c d e f g)
+                    (l/== q [a b c d e f g]))))
   )
 
 (def my-write-handlers
