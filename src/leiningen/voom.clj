@@ -1093,12 +1093,12 @@
              (file-patho next-sha new-path fname fsha tree-path))]))
 
 (def ancestoro
-  (l/tabled [childer parenter ancestor?]
+  (l/tabled [childer parenter]
           (l/conde
-           [(r-commit-parent childer parenter) (l/== ancestor? true)]
+           [(r-commit-parent childer parenter)]
            [(l/fresh [nparent]
                      (r-commit-parent childer nparent)
-                     (ancestoro nparent parenter ancestor?))])))
+                     (ancestoro nparent parenter))])))
 
 (comment
   (def xdb1 (pldb/db [r-tree :a :b :c :d]))
@@ -1133,8 +1133,9 @@
          p (str->sha "65691217cd9aa2b2738518dbebd3fdc7d58b162f")]
      (doall
       (pldb/with-db db
-        (l/run 10 [q]
-               (ancestoro c p q))))))
+        (l/run 1 [q]
+               (ancestoro c p)
+               (l/== q true))))))
 
   (pldb/with-db db
     (l/run* [filename]
