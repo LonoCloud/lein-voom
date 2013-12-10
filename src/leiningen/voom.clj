@@ -10,10 +10,10 @@
             [datomic.db :as db]
             [clojure.core.logic.pldb :as pldb]
             [clojure.core.logic :as l]
-            [clojure.core.reducers :as red]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [leiningen.voom.long-sha :as sha :only [mk]]
+            [leiningen.voom.pldb :as vdb]
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
@@ -1067,35 +1067,6 @@
            [fname {:keys [sha ftype]}] (git-tree gitdir tree-sha)]
        [r-tree tree-bsha fname (keyword ftype) (sha/mk sha)]))))
 
-(defn pldb-rels
-  [db]
-  (for [[rel-name indexes] db]
-    [rel-name (::pldb/unindexed indexes)]))
-
-(defn rels->pldb
-  [rels rel-data]
-  (let [rel-index-i (into {} (for [rel rels]
-                               [(:rel-name (meta rel))
-                                (keep-indexed #(when %2 %1)
-                                              (:indexes (meta rel)))]))]
-    (reduce
-     (fn [db [rel-name unindexed]]
-       (let [unindexed (into #{} (red/map vec unindexed))]
-         (assoc db
-           rel-name
-           (into {::pldb/unindexed unindexed}
-                 (for [i (rel-index-i rel-name)]
-                   [i (persistent!
-                       (reduce (fn [index tuple]
-                                 (let [key (nth tuple i)]
-                                   (assoc! index key ((fnil conj #{})
-                                                      (get index key)
-                                                      tuple))))
-                               (transient {})
-                               unindexed))])))))
-     pldb/empty-db
-     rel-data)))
-
 (defn file-patho
   [tree-sha so-far fname fsha tree-path]
   (l/conde
@@ -1150,17 +1121,17 @@
                                  (sha/mk "7b3e68a8839aeb4"))))
   (def xdb1 (pldb/db [r-tree :a :b :c :d]))
   (pldb/with-db xdb1 (l/run* [a] (r-tree a :b :c :d)))
-  (def xdb2 (rels->pldb [r-tree] (pldb-rels xdb1)))
+  (def xdb2 (vdb/from-reldata [r-tree] (vdb/to-reldata xdb1)))
   (pldb/with-db xdb2 (l/run* [a] (r-tree a :b :c :d)))
-  (def xdb3 (rels->pldb [r-tree] (fress/read (fress/write (pldb-rels xdb1)))))
+  (def xdb3 (vdb/from-reldata [r-tree] (fress/read (fress/write (vdb/to-reldata xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
   (time (def db (apply pldb/db (git-logic-tuples (io/file voom-repos "lein-voom")))))
   (time (def db2 (add-r-projs (io/file voom-repos "lein-voom") db)))
-  (time (fress-spit-seq "tmp.frs" (pldb-rels db2)))
+  (time (fress-spit-seq "tmp.frs" (vdb/to-reldata db2)))
   (time (def db3
-          (rels->pldb [r-branch r-commit r-commit-parent r-tree r-proj]
-                      (fress/read "tmp.frs" :handlers sha/read-handlers))))
+          (vdb/from-reldata [r-branch r-commit r-commit-parent r-tree r-proj]
+                            (fress/read "tmp.frs" :handlers sha/read-handlers))))
   (time (def x (fress/read "tmp.frs" :handlers sha/read-handlers)))
 
   (time
