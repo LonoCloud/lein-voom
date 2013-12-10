@@ -462,9 +462,12 @@
          (.delete tmp-file))))))
 
 (defn origin-branches
-  [gitdir]
-  (->> (git {:gitdir gitdir} "rev-parse"
-            "--symbolic-full-name" "--remotes=origin/")
+  [gitdir & {:keys [sha?]}]
+  (->> (apply git {:gitdir gitdir} "rev-parse"
+              (concat
+               (when-not sha?
+                 ["--symbolic-full-name"])
+               ["--remotes=origin/"]))
        :lines
        (map #(re-find #"[^/]+$" %))
        distinct))
@@ -983,9 +986,10 @@
 
 
 (defn git-commits
-  [gitdir branch]
+  [gitdir & args]
   (->>
-   (git {:gitdir gitdir} "log" "--full-history" "--reverse" "--pretty=%H,%ct,%T,%P" branch)
+   (apply git {:gitdir gitdir} "log" "--full-history" "--reverse"
+          "--pretty=%H,%ct,%T,%P" args)
    :lines
    (map #(let [[sha ctime tree parents] (s/split % #",")
                parents (when parents (s/split parents #" "))]
