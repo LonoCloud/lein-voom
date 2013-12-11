@@ -974,28 +974,35 @@
                 (fn [db [name sha]]
                   (pldb/db-fact db r-branch name sha))
                 db new-branches)]
-        (reduce
-         (fn [db {:keys [sha ctime tree parents]}]
-           (let [bsha (sha/mk sha)
-                 db (pldb/db-fact db r-commit
-                                  bsha
-                                  (Date. (* 1000 (Long/parseLong ctime)))
-                                  (sha/mk tree))]
-             (reduce (fn [db parent]
-                       (pldb/db-fact db r-commit-parent bsha (sha/mk parent)))
-                     db parents)))
-         db (apply git-commits gitdir log-args))))))
+        (->> (apply git-commits gitdir log-args)
+             (report-progress (str gitdir " commits (step 1/3)"))
+             (reduce
+              (fn [db {:keys [sha ctime tree parents]}]
+                (let [bsha (sha/mk sha)
+                      db (pldb/db-fact db r-commit
+                                       bsha
+                                       (Date. (* 1000 (Long/parseLong ctime)))
+                                       (sha/mk tree))]
+                  (reduce (fn [db parent]
+                            (pldb/db-fact db r-commit-parent bsha (sha/mk parent)))
+                          db parents)))
+              db))))))
 
 
 (defn add-r-trees
   [db gitdir]
   (let [trees (set (vdb/get-column db r-commit 2))
         read-trees (vdb/get-column db r-tree 0)
-        tree-shas (apply disj trees read-trees)]
+        tree-shas (apply disj trees read-trees)
+        t (new-throttle
+           (fn [i]
+             (printf (str "\r%s (step 2/3) %d trees to read.....") (str gitdir) i)
+             (flush)))]
     (if (empty? tree-shas)
       db ;; nothing to do
       (loop [db (vary-meta db assoc ::dirty true)
              tree-shas tree-shas]
+        (throttled t (count tree-shas))
         (if (empty? tree-shas)
           db ;; done
           (let [tree (first tree-shas)
@@ -1026,18 +1033,20 @@
         blobs-to-read (apply disj (set proj-blobs) read-blobs)]
     (if (empty? blobs-to-read)
       db
-      (reduce
-       (fn [db blob-sha]
-         (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
-           (let [proj-name (symbol (:group proj) (:name proj))
-                 has-snaps? (some #(.contains ^String % "-SNAPSHOT")
-                                  (map second (:dependencies proj)))
-                 [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
-             (pldb/db-fact db r-proj blob-sha proj-name
-                           vmajor vminor vinc vqual has-snaps?))
-           (pldb/db-fact db r-proj blob-sha nil nil nil nil nil nil)))
-       (vary-meta db assoc ::dirty true)
-       blobs-to-read))))
+      (->>
+       blobs-to-read
+       (report-progress (str gitdir " project files (step 3/3)"))
+       (reduce
+        (fn [db blob-sha]
+          (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
+            (let [proj-name (symbol (:group proj) (:name proj))
+                  has-snaps? (some #(.contains ^String % "-SNAPSHOT")
+                                   (map second (:dependencies proj)))
+                  [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
+              (pldb/db-fact db r-proj blob-sha proj-name
+                            vmajor vminor vinc vqual has-snaps?))
+            (pldb/db-fact db r-proj blob-sha nil nil nil nil nil nil)))
+        (vary-meta db assoc ::dirty true))))))
 
 (def voomdb-header "voom-db-0")
 
@@ -1047,6 +1056,7 @@
 
 (defn read-git-db
   [gitdir]
+  (println "Reading" (str gitdir))
   (let [file (git-db-file gitdir)
         [header & reldata] (-> file
                                io/input-stream
