@@ -925,7 +925,7 @@
 
 
 (pldb/db-rel r-branch name sha)
-(pldb/db-rel r-commit ^:index sha ctime tree-sha)
+(pldb/db-rel r-commit ^:index sha ctime ^:index tree-sha)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
 (pldb/db-rel r-tree ^:index sha ^:index name type ^:index obj-sha)
 (pldb/db-rel r-proj ^:index blob-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
