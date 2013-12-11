@@ -1096,6 +1096,13 @@
       (write-git-db db gitdir))
     db))
 
+(defn update-repo-dbs
+  "Update voom dbs for all git repos in $VOOM_REPOS.
+
+  Example: lein voom update-repo-dbs"
+  [_]
+  (time (p-repos (fn [p] (updated-git-db p)))))
+
 (def obj-patho
   (l/tabled [tree-sha so-far fname ftype fsha tree-path]
    (l/conde
@@ -1207,7 +1214,7 @@
 
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
-               #'retag-all-repos #'ver-parse #'wrap])
+               #'retag-all-repos #'update-repo-dbs #'ver-parse #'wrap])
 
 (def internal-subtasks [#'box #'box-new #'box-init #'box-add #'box-remove])
 
