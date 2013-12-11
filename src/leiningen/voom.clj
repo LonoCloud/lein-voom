@@ -1099,6 +1099,40 @@
                (ancestoro c p)
                (l/== q true))))))
 
+(time ; full
+   (doseq [f
+           (into #{}
+                 (let [_ l/lvar
+                       sha (sha/mk "36bb052caf1d560448dfd9e3c81e19d8e210f1a1")
+                       pname 'name/of-project]
+                   (doall
+                    (pldb/with-db db2
+                      (l/run 20 [a]
+                             (l/fresh [p M m i q s p2 M2 m2 i2 q2 s2 tpath tsha osha oosha otsha bsha stsha ostsha ootsha oostsha oobsha ptpath thing]
+                                      ;; For commit SHA, find the location and version of PNAME
+                                      (r-commit sha (_) tsha)
+                                      (r-proj bsha pname M m i q s)
+                                      (obj-patho tsha () "project.clj" :blob bsha tpath)
+                                      ;; Locate the project directory
+                                      (l/conso thing ptpath tpath)
+                                      (obj-patho tsha () thing :tree stsha ptpath)
+                                      ;; Find an ancestor of SHA with a project directory at the same location
+                                      (ancestoro sha osha)
+                                      (r-commit osha (_) otsha)
+                                      (obj-patho otsha () thing :tree ostsha ptpath)
+                                      (l/!= stsha ostsha)
+                                      ;; Where the very previous commit at this location has a different project.clj blob
+                                      (r-commit-parent osha oosha)
+                                      (r-commit oosha (_) ootsha)
+                                      (obj-patho ootsha () thing :tree oostsha ptpath)
+                                      (l/!= ostsha oostsha)
+                                      ;; Find the project details
+                                      (obj-patho ootsha () "project.clj" :blob oobsha tpath)
+                                      (r-proj oobsha (_) M2 m2 i2 q2 s2)
+                                      (l/== a [tpath sha osha oobsha [p M m i q s] [p2 M2 m2 i2 q2 s2]])
+                                      ))))))]
+     (prn f)))
+
   (pldb/with-db db3
     (l/run 10 [obj-sha]
      (l/fresh [sha]
