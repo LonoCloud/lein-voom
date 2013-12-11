@@ -946,46 +946,41 @@
 
 (defn add-r-commits
   [db gitdir]
-  (let [old-branches (pldb/with-db db
-                       (l/run* [q]
-                               (l/fresh [name sha]
-                                        (r-branch name sha)
-                                        (l/== q [name sha]))))
-        db-without-branches (reduce
-                             (fn [db [name sha]]
-                               (pldb/db-retraction db r-branch name sha))
-                             db old-branches)
-        new-branches (map list
-                          (origin-branches gitdir)
-                          (origin-branches gitdir :sha? true))
-        log-args (concat (map second new-branches)
-                         (map #(str "^" %) (map second old-branches)))
-        db (reduce
-            (fn [db [name sha]]
-              (pldb/db-fact db r-branch name (sha/mk sha)))
-            db new-branches)]
-    ;; TODO -- dirty db on branch change
-    (reduce-db
-     db (apply git-commits gitdir log-args)
-     (fn [db {:keys [sha ctime tree parents]}]
-       (let [bsha (sha/mk sha)
-             db (pldb/db-fact db r-commit
-                              bsha
-                              (Date. (* 1000 (Long/parseLong ctime)))
-                              (sha/mk tree))]
-         (reduce (fn [db parent]
-                   (pldb/db-fact db r-commit-parent bsha (sha/mk parent)))
-                 db parents))))))
+  (let [old-branches (into {} (vdb/get-facts db r-branch))
+        new-branches (zipmap
+                      (origin-branches gitdir)
+                      (map sha/mk (origin-branches gitdir :sha? true)))]
+    (if (= old-branches new-branches)
+      db ;; no changes
+      (let [log-args (concat (map str (vals new-branches))
+                             (map #(str "^" %) (vals old-branches)))
+            db (vary-meta db assoc ::dirty true)
+            db (reduce
+                (fn [db [name sha]]
+                  (pldb/db-retraction db r-branch name sha))
+                db old-branches)
+            db (reduce
+                (fn [db [name sha]]
+                  (pldb/db-fact db r-branch name sha))
+                db new-branches)]
+        (reduce
+         (fn [db {:keys [sha ctime tree parents]}]
+           (let [bsha (sha/mk sha)
+                 db (pldb/db-fact db r-commit
+                                  bsha
+                                  (Date. (* 1000 (Long/parseLong ctime)))
+                                  (sha/mk tree))]
+             (reduce (fn [db parent]
+                       (pldb/db-fact db r-commit-parent bsha (sha/mk parent)))
+                     db parents)))
+         db (apply git-commits gitdir log-args))))))
+
 
 (defn add-r-trees
   [db gitdir]
-  (let [[trees read-trees]
-        (pldb/with-db db
-          [(l/run* [tree-sha] (l/fresh [sha ct] (r-commit sha ct tree-sha)))
-           (l/run* [tree-sha]
-                   (l/fresh [fname ftype obj-sha]
-                            (r-tree tree-sha fname ftype obj-sha)))])
-        tree-shas (apply disj (set trees) read-trees)]
+  (let [trees (set (vdb/get-column db r-commit 2))
+        read-trees (vdb/get-column db r-tree 0)
+        tree-shas (apply disj trees read-trees)]
     (if (empty? tree-shas)
       db ;; nothing to do
       (loop [db (vary-meta db assoc ::dirty true)
@@ -1012,15 +1007,11 @@
 
 (defn add-r-projs
   [db gitdir]
-  (let [[proj-blobs read-blobs]
-        (pldb/with-db db
-          [(l/run* [blob-sha]
-                   (l/fresh [proj-dir-sha]
-                            (r-tree proj-dir-sha "project.clj" :blob blob-sha)))
-           (l/run* [blob-sha]
-                   (l/fresh [proj-name vmajor vminor vinc vqual has-snaps?]
-                            (r-proj blob-sha proj-name
-                                    vmajor vminor vinc vqual has-snaps?)))])]
+  (let [proj-blobs (pldb/with-db db
+                     (l/run* [blob-sha]
+                       (l/fresh [proj-dir-sha]
+                         (r-tree proj-dir-sha "project.clj" :blob blob-sha))))
+        read-blobs (vdb/get-column db r-proj 0)]
     (reduce-db
      db (apply disj (set proj-blobs) read-blobs)
      (fn [db blob-sha]

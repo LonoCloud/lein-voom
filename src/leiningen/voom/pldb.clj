@@ -1,13 +1,24 @@
 (ns leiningen.voom.pldb
   (:require [clojure.core.reducers :as red]
-            [clojure.core.logic.pldb :as pldb]))
+            [clojure.core.logic.pldb :as pldb
+             :refer [rel-key rel-indexes]]))
 
 (defn ^:dynamic *missing-rel*
   [rels rel-name]
   (throw (ex-info (str "reldata contains rel not provided to 'from-reldata': "
                        rel-name)
                   {:rel-name rel-name
-                   :provided-rels (map #(:rel-name (meta %)) rels)})))
+                   :provided-rels (map rel-key rels)})))
+
+(defn get-column [db rel col]
+  (let [rel-name (rel-key rel)]
+    (if-let [index (get-in db [rel-name col])]
+      (keys index)
+      (map #(nth % col) (get-in db [rel-name ::pldb/unindexed])))))
+
+(defn get-facts
+  [db rel]
+  (pldb/facts-for [db] (rel-key rel)))
 
 (defn to-reldata
   "Returns reldata for a core.logic pldb db. The reldata is a seq of
@@ -24,9 +35,9 @@
   indexed, so the live rels are used for that."
   [rels reldata]
   (let [rel-index-i (into {} (for [rel rels]
-                               [(:rel-name (meta rel))
+                               [(rel-key rel)
                                 (keep-indexed #(when %2 %1)
-                                              (:indexes (meta rel)))]))]
+                                              (rel-indexes rel))]))]
     (reduce
      (fn [db [rel-name unindexed]]
        (let [unindexed (into #{} (red/map vec unindexed))]
