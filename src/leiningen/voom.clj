@@ -938,12 +938,6 @@
                                      %) (reverse vnums))]
     [vmajor vminor vinc vqual]))
 
-(defn reduce-db
-  [db coll f]
-  (if (empty? coll)
-    db
-    (reduce f (vary-meta db assoc ::dirty true) coll)))
-
 (defn add-r-commits
   [db gitdir]
   (let [old-branches (into {} (vdb/get-facts db r-branch))
@@ -1011,18 +1005,22 @@
                      (l/run* [blob-sha]
                        (l/fresh [proj-dir-sha]
                          (r-tree proj-dir-sha "project.clj" :blob blob-sha))))
-        read-blobs (vdb/get-column db r-proj 0)]
-    (reduce-db
-     db (apply disj (set proj-blobs) read-blobs)
-     (fn [db blob-sha]
-       (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
-         (let [proj-name (symbol (:group proj) (:name proj))
-               has-snaps? (some #(.contains ^String % "-SNAPSHOT")
-                                (map second (:dependencies proj)))
-               [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
-           (pldb/db-fact db r-proj blob-sha proj-name
-                         vmajor vminor vinc vqual has-snaps?))
-         db)))))
+        read-blobs (vdb/get-column db r-proj 0)
+        blobs-to-read (apply disj (set proj-blobs) read-blobs)]
+    (if (empty? blobs-to-read)
+      db
+      (reduce
+       (fn [db blob-sha]
+         (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
+           (let [proj-name (symbol (:group proj) (:name proj))
+                 has-snaps? (some #(.contains ^String % "-SNAPSHOT")
+                                  (map second (:dependencies proj)))
+                 [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
+             (pldb/db-fact db r-proj blob-sha proj-name
+                           vmajor vminor vinc vqual has-snaps?))
+           (pldb/db-fact db r-proj blob-sha nil nil nil nil nil nil)))
+       (vary-meta db assoc ::dirty true)
+       blobs-to-read))))
 
 (defn update-git-db
   [db gitdir]
