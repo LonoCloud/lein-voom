@@ -1022,13 +1022,50 @@
        (vary-meta db assoc ::dirty true)
        blobs-to-read))))
 
-(defn update-git-db
+(def voomdb-header "voom-db-0")
+
+(defn git-db-file
+  [gitdir]
+  (io/file gitdir ".git" "voomdb.frs.gz"))
+
+(defn read-git-db
+  [gitdir]
+  (let [file (git-db-file gitdir)
+        [header & reldata] (-> file
+                               io/input-stream
+                               java.util.zip.GZIPInputStream.
+                               (fress/read :handlers sha/read-handlers))]
+    (if (= header voomdb-header)
+      (vdb/from-reldata
+       [r-branch r-commit r-commit-parent r-tree r-proj]
+       reldata)
+      (do
+        (println "Existing voomdb file for" (str gitdir)
+                 "has wrong header" header "needed:"
+                 voomdb-header)
+        pldb/empty-db))))
+
+(defn write-git-db
   [db gitdir]
-  (let [db (-> db
+  (with-open [w (-> (git-db-file gitdir)
+                    io/output-stream
+                    java.util.zip.GZIPOutputStream.
+                    (fress/create-writer :handlers sha/write-handlers))]
+    (fress/begin-open-list w)
+    (fress/write-object w voomdb-header)
+    (doseq [item (vdb/to-reldata db)]
+      (fress/write-object w item))))
+
+(defn updated-git-db
+  [gitdir]
+  (let [db (-> (if (.exists (git-db-file gitdir))
+                 (read-git-db gitdir)
+                 pldb/empty-db)
                (add-r-commits gitdir)
                (add-r-trees gitdir)
                (add-r-projs gitdir))]
-    ;; TODO: if dirty, write out db
+    (when (::dirty (meta db))
+      (write-git-db db gitdir))
     db))
 
 (def obj-patho
@@ -1058,13 +1095,8 @@
   (def xdb3 (vdb/from-reldata [r-tree] (fress/read (fress/write (vdb/to-reldata xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
-  (time (def db (update-git-db pldb/empty-db (io/file voom-repos "lein-voom"))))
-  (time (def db2 (update-git-db db (io/file voom-repos "lein-voom"))))
-  (time (fress-spit-seq "tmp.frs" (vdb/to-reldata db2)))
-  (time (def db3
-          (vdb/from-reldata [r-branch r-commit r-commit-parent r-tree r-proj]
-                            (fress/read "tmp.frs" :handlers sha/read-handlers))))
-  (time (def x (fress/read "tmp.frs" :handlers sha/read-handlers)))
+  (time (def db (updated-git-db (io/file voom-repos "lein-voom"))))
+  (time (def db2 (updated-git-db (io/file voom-repos "lein-voom"))))
 
   (time
    (let [fname "core.clj"]
@@ -1143,14 +1175,7 @@
                     (l/== q [a b c d e f g]))))
   )
 
-(defn fress-spit-seq
-  [filename coll]
-  (with-open [^org.fressian.FressianWriter w
-              , (fress/create-writer (io/output-stream filename)
-                                     :handlers sha/write-handlers)]
-    (fress/begin-open-list w)
-    (doseq [item coll]
-      (fress/write-object w item))))
+
 
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
