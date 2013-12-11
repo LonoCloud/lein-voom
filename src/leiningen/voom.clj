@@ -391,21 +391,37 @@
        (map #(re-find #"[^/]+$" %))
        distinct))
 
+(defn new-throttle
+  ([msg-fn] (new-throttle 500 msg-fn (constantly false)))
+  ([ms msg-fn] (new-throttle 500 msg-fn (constantly false)))
+  ([ms msg-fn report-pred]
+     {:last-report (atom 0)
+      :ms ms ;; reporting rate in milliseconds
+      :msg-fn msg-fn
+      :report-pred report-pred}))
+
+(defn throttled [throttle arg]
+  (let [now (System/currentTimeMillis)]
+    (when (or ((:report-pred throttle) arg)
+              (< (:ms throttle) (- now @(:last-report throttle))))
+      (reset! (:last-report throttle) now)
+      ((:msg-fn throttle) arg))))
+
 (defn report-progress
   "Eagerly consume xs, but return a lazy seq that reports progress
   every half second as the returned seq is consumed."
   [msg xs]
   (concat
-   (let [last-report (clojure.lang.Box. 0)
-         c (count xs)
-         digits (inc (long (quot (Math/log c) (Math/log 10))))]
+   (let [c (count xs)
+         digits (inc (long (quot (Math/log c) (Math/log 10))))
+         t (new-throttle
+            (fn [i]
+              (printf (str "\r%s %" digits "d/%d ...") msg (inc i) c)
+              (flush))
+            #(= (inc %) c))]
      (map-indexed
       (fn [i x]
-        (let [now (System/currentTimeMillis)]
-          (when (or (= (inc i) c) (< 500 (- now (.val last-report))))
-            (set! (.val last-report) now)
-            (printf (str "\r%s %" digits "d/%d ...") msg (inc i) c)
-            (flush)))
+        (throttled t i)
         x)
       xs))
    (lazy-seq (println "done"))))
