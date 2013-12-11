@@ -17,7 +17,8 @@
   (:import [clojure.lang #_IPersistentVector Seqable]
            [java.util Date]
            [java.lang.reflect Array]
-           [java.io File FileInputStream FileOutputStream OutputStreamWriter]
+           [java.io File FileInputStream FileOutputStream OutputStreamWriter
+            Closeable]
            [java.util.logging Logger Handler Level]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
@@ -1040,7 +1041,7 @@
 
 (def voomdb-header "voom-db-0")
 
-(defn git-db-file
+(defn ^File git-db-file
   [gitdir]
   (io/file gitdir ".git" "voomdb.frs.gz"))
 
@@ -1066,7 +1067,8 @@
   (with-open [w (-> (git-db-file gitdir)
                     io/output-stream
                     java.util.zip.GZIPOutputStream.
-                    (fress/create-writer :handlers sha/write-handlers))]
+                    ^Closeable (fress/create-writer
+                                :handlers sha/write-handlers))]
     (fress/begin-open-list w)
     (fress/write-object w voomdb-header)
     (doseq [item (vdb/to-reldata db)]
