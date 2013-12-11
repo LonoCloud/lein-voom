@@ -1042,14 +1042,14 @@
     ;; TODO: if dirty, write out db
     db))
 
-(defn file-patho
-  [tree-sha so-far fname fsha tree-path]
+(defn obj-patho
+  [tree-sha so-far fname ftype fsha tree-path]
   (l/conde
-   [(r-tree tree-sha fname :blob fsha) (l/== so-far tree-path)]
+   [(r-tree tree-sha fname ftype fsha) (l/== so-far tree-path)]
    [(l/fresh [next-path next-sha new-path]
              (r-tree tree-sha next-path :tree next-sha)
              (l/conso next-path so-far new-path)
-             (file-patho next-sha new-path fname fsha tree-path))]))
+             (obj-patho next-sha new-path fname ftype fsha tree-path))]))
 
 (def ancestoro
   (l/tabled [childer parenter]
@@ -1086,8 +1086,8 @@
                         (r-commit c-sha ctime tree-sha)
                         (r-commit-parent c-sha p-sha)
                         (r-commit p-sha p-ctime p-tree-sha)
-                        (file-patho p-tree-sha nil fname p-obj-sha tree-path)
-                        (file-patho tree-sha nil fname obj-sha tree-path)
+                        (obj-patho p-tree-sha nil fname :blob p-obj-sha tree-path)
+                        (obj-patho tree-sha nil fname :blob obj-sha tree-path)
                         (l/!= obj-sha p-obj-sha)))))))
 
   (time
