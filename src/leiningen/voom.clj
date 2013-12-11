@@ -994,7 +994,7 @@
           db ;; done
           (let [tree (first tree-shas)
                 more-trees (disj tree-shas tree)]
-            (if (seq (l/run 1 [n] (l/fresh [t s] (r-tree tree n t s))))
+            (if (seq (pldb/with-db db (l/run 1 [n] (l/fresh [t s] (r-tree tree n t s)))))
               (recur db more-trees) ;; this tree is done already
               (let [sub-trees (git-tree gitdir (str tree))
                     db (reduce
