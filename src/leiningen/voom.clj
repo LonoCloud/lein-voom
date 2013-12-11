@@ -1042,14 +1042,14 @@
     ;; TODO: if dirty, write out db
     db))
 
-(defn obj-patho
-  [tree-sha so-far fname ftype fsha tree-path]
-  (l/conde
-   [(r-tree tree-sha fname ftype fsha) (l/== so-far tree-path)]
-   [(l/fresh [next-path next-sha new-path]
-             (r-tree tree-sha next-path :tree next-sha)
-             (l/conso next-path so-far new-path)
-             (obj-patho next-sha new-path fname ftype fsha tree-path))]))
+(def obj-patho
+  (l/tabled [tree-sha so-far fname ftype fsha tree-path]
+   (l/conde
+    [(r-tree tree-sha fname ftype fsha) (l/== so-far tree-path)]
+    [(l/fresh [next-path next-sha new-path]
+              (r-tree tree-sha next-path :tree next-sha)
+              (l/conso next-path so-far new-path)
+              (obj-patho next-sha new-path fname ftype fsha tree-path))])))
 
 (def ancestoro
   (l/tabled [childer parenter]
