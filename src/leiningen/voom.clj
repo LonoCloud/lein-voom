@@ -12,6 +12,7 @@
             [leiningen.core.main :as lmain]
             [leiningen.voom.long-sha :as sha :only [mk]]
             [leiningen.voom.pldb :as vdb]
+            [lonocloud.synthread :as ->]
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
@@ -940,12 +941,11 @@
           [fname {:sha sha
                   :ftype ftype}])))
 
-
-(pldb/db-rel r-branch name sha)
-(pldb/db-rel r-commit ^:index sha ctime ^:index tree-sha)
+(pldb/db-rel r-branch repo-path branch-name sha)
+(pldb/db-rel r-commit ^:index sha ctime parent-count parents)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
-(pldb/db-rel r-tree ^:index sha ^:index name type ^:index obj-sha)
-(pldb/db-rel r-proj ^:index blob-sha ^:index proj-name vmajor vminor vinc vqual has-snaps?)
+(pldb/db-rel r-commit-path ^:index sha ^:index path)
+(pldb/db-rel r-proj ^:index sha ^:index path ^:index proj-name vmajor vminor vinc vqual has-snaps?)
 
 (defn sem-ver-parse [ver-str]
   (let [vparts (re-matches #"(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)-)?(.*)" ver-str)
@@ -955,100 +955,100 @@
                                      %) (reverse vnums))]
     [vmajor vminor vinc vqual]))
 
-(defn add-r-commits
+(defn exported-commits
+  [gitdir tip-shas seen-shas]
+  (let [marks-file (File/createTempFile "marks" ".txt")]
+    (try
+      (let [{:keys [out]} (apply sh "git" "fast-export" "--no-data"
+                                 (str "--export-marks=" marks-file)
+                                 (concat (map str tip-shas)
+                                         (map #(str "^" %) seen-shas)
+                                         [:dir gitdir, :out-enc :bytes]))
+            marks (into {}
+                        (map #(let [[mark sha] (s/split % #" ")]
+                                [mark (sha/mk sha)])
+                             (re-seq #"(?m)^.*$" (slurp marks-file))))]
+        (with-open [rdr (-> out
+                            java.io.ByteArrayInputStream.
+                            (java.io.InputStreamReader. "ISO-8859-1")
+                            java.io.BufferedReader.)]
+          (loop [commits [], commit {}]
+            (if-let [line (.readLine rdr)]
+              (if (empty? line)
+                (recur (conj commits commit) {})
+                (let [[cmd more-line] (s/split line #" " 2)]
+                  (recur commits
+                         (case cmd
+                           ("reset" "commit" "author") commit ;; ignore these
+                           "mark" (assoc commit :sha (marks more-line))
+                           "committer" (->> more-line
+                                            (re-matches #".* (\d+) .\d+")
+                                            second Long/parseLong (* 1000) Date.
+                                            (assoc commit :ctime))
+                           "data" (do (.skip rdr (Long/parseLong more-line))
+                                      commit)
+                           ("from" "merge") (update-in commit [:parents]
+                                                       (fnil conj [])
+                                                       (marks more-line))
+                           "M" (let [[_ sha path] (s/split more-line #" " 3)]
+                                 (update-in commit [:paths]
+                                            assoc path (sha/mk sha)))
+                           "D" (update-in commit [:paths] assoc more-line nil)
+                           (do (println "Unparsed:" line)
+                               commit)))))
+              commits))))
+      (finally
+       (.delete marks-file)))))
+
+(defn proj-fact-tail
+  [gitdir blob-sha]
+  (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
+    (let [proj-name (symbol (:group proj) (:name proj))
+          has-snaps? (some #(.contains ^String % "-SNAPSHOT")
+                           (map second (:dependencies proj)))
+          [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
+      [proj-name vmajor vminor vinc vqual has-snaps?])
+    [nil nil nil nil nil nil]))
+
+(defn add-git-facts
   [db gitdir]
-  (let [old-branches (into {} (vdb/get-facts db r-branch))
-        new-branches (zipmap
-                      (origin-branches gitdir)
-                      (map sha/mk (origin-branches gitdir :sha? true)))]
-    (if (= old-branches new-branches)
-      db ;; no changes
-      (let [log-args (concat (map str (vals new-branches))
-                             (map #(str "^" %) (vals old-branches)))
-            db (vary-meta db assoc ::dirty true)
-            db (reduce
-                (fn [db [name sha]]
-                  (pldb/db-retraction db r-branch name sha))
-                db old-branches)
-            db (reduce
-                (fn [db [name sha]]
-                  (pldb/db-fact db r-branch name sha))
-                db new-branches)]
-        (->> (apply git-commits gitdir log-args)
-             (report-progress (str gitdir " commits (step 1/3)"))
-             (reduce
-              (fn [db {:keys [sha ctime tree parents]}]
-                (let [bsha (sha/mk sha)
-                      db (pldb/db-fact db r-commit
-                                       bsha
-                                       (Date. (* 1000 (Long/parseLong ctime)))
-                                       (sha/mk tree))]
-                  (reduce (fn [db parent]
-                            (pldb/db-fact db r-commit-parent bsha (sha/mk parent)))
-                          db parents)))
-              db))))))
+  (-> db
+    (->/let [old-branches (into {} (map (comp vec next)
+                                        (vdb/get-facts db r-branch)))
+             new-branches (zipmap
+                           (origin-branches gitdir)
+                           (map sha/mk (origin-branches gitdir :sha? true)))]
+      (->/when (not= old-branches new-branches)
+        (->/let [repo (-> (remotes gitdir) :origin :fetch)]
+          (vary-meta assoc ::dirty true)
 
+          ;; Update branchs
+          (->/for [[name sha] old-branches]
+            (pldb/db-retraction r-branch repo name sha))
+          (->/for [[name sha] new-branches]
+            (pldb/db-fact r-branch repo name sha))
 
-(defn add-r-trees
-  [db gitdir]
-  (let [trees (set (vdb/get-column db r-commit 2))
-        read-trees (vdb/get-column db r-tree 0)
-        tree-shas (apply disj trees read-trees)
-        t (new-throttle
-           (fn [i]
-             (printf (str "\r%s (step 2/3) %d trees to read.....") (str gitdir) i)
-             (flush)))]
-    (if (empty? tree-shas)
-      db ;; nothing to do
-      (loop [db (vary-meta db assoc ::dirty true)
-             tree-shas tree-shas]
-        (throttled t (count tree-shas))
-        (if (empty? tree-shas)
-          db ;; done
-          (let [tree (first tree-shas)
-                more-trees (disj tree-shas tree)]
-            (if (seq (pldb/with-db db (l/run 1 [n] (l/fresh [t s] (r-tree tree n t s)))))
-              (recur db more-trees) ;; this tree is done already
-              (let [sub-trees (git-tree gitdir (str tree))
-                    db (reduce
-                        (fn [db [fname {:keys [sha ftype]}]]
-                          (pldb/db-fact db r-tree tree fname
-                                        (keyword ftype) (sha/mk sha)))
-                        db
-                        sub-trees)
-                    more-trees (into more-trees
-                                     (keep (fn [[_ {:keys [ftype sha]}]]
-                                             (when (= "tree" ftype)
-                                               (sha/mk sha)))
-                                          sub-trees))]
-                (recur db more-trees)))))))))
+          ;; Add commits
+          (->/for [commit (exported-commits
+                           gitdir (vals new-branches) (vals old-branches))]
+            (pldb/db-fact r-commit (:sha commit) (:ctime commit)
+                          (count (:parents commit)) (:parents commit))
+            (->/for [parent (:parents commit)]
+              (pldb/db-fact r-commit-parent (:sha commit) parent))
+            (->/for [[path file-sha] (:paths commit)]
+              (->/when-let [[_ dir] (re-matches #"(.*/|^)project.clj" path)]
+                (->/apply pldb/db-fact r-proj (:sha commit) dir
+                          (proj-fact-tail gitdir file-sha))))
+            (->/for [dir-path (set (mapcat (fn [path]
+                                             (let [parts (drop-last
+                                                          (s/split path #"/"))]
+                                               (if (empty? parts)
+                                                 [""]
+                                                 (reductions #(str %1 "/" %2) parts))))
+                                           (keys (:paths commit))))]
+              (pldb/db-fact r-commit-path (:sha commit) dir-path))))))))
 
-(defn add-r-projs
-  [db gitdir]
-  (let [proj-blobs (pldb/with-db db
-                     (l/run* [blob-sha]
-                       (l/fresh [proj-dir-sha]
-                         (r-tree proj-dir-sha "project.clj" :blob blob-sha))))
-        read-blobs (vdb/get-column db r-proj 0)
-        blobs-to-read (apply disj (set proj-blobs) read-blobs)]
-    (if (empty? blobs-to-read)
-      db
-      (->>
-       blobs-to-read
-       (report-progress (str gitdir " project files (step 3/3)"))
-       (reduce
-        (fn [db blob-sha]
-          (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
-            (let [proj-name (symbol (:group proj) (:name proj))
-                  has-snaps? (some #(.contains ^String % "-SNAPSHOT")
-                                   (map second (:dependencies proj)))
-                  [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
-              (pldb/db-fact db r-proj blob-sha proj-name
-                            vmajor vminor vinc vqual has-snaps?))
-            (pldb/db-fact db r-proj blob-sha nil nil nil nil nil nil)))
-        (vary-meta db assoc ::dirty true))))))
-
-(def voomdb-header "voom-db-0")
+(def voomdb-header "voom-db-1")
 
 (defn ^File git-db-file
   [gitdir]
@@ -1056,7 +1056,6 @@
 
 (defn read-git-db
   [gitdir]
-  (println "Reading" (str gitdir))
   (let [file (git-db-file gitdir)
         [header & reldata] (-> file
                                io/input-stream
@@ -1064,7 +1063,7 @@
                                (fress/read :handlers sha/read-handlers))]
     (if (= header voomdb-header)
       (vdb/from-reldata
-       [r-branch r-commit r-commit-parent r-tree r-proj]
+       [r-branch r-commit r-commit-parent r-commit-path r-proj]
        reldata)
       (do
         (println "Existing voomdb file for" (str gitdir)
@@ -1089,9 +1088,7 @@
   (let [db (-> (if (.exists (git-db-file gitdir))
                  (read-git-db gitdir)
                  pldb/empty-db)
-               (add-r-commits gitdir)
-               (add-r-trees gitdir)
-               (add-r-projs gitdir))]
+               (add-git-facts gitdir))]
     (when (::dirty (meta db))
       (write-git-db db gitdir))
     db))
@@ -1103,6 +1100,7 @@
   [_]
   (time (p-repos (fn [p] (updated-git-db p)))))
 
+#_
 (def obj-patho
   (l/tabled [tree-sha so-far fname ftype fsha tree-path]
    (l/conde

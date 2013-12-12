@@ -6,6 +6,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[clj-glob "1.0.0"]
+                 [lonocloud/synthread "1.0.5"]
                  [org.clojure/data.fressian "0.2.0"]
                  [org.clojure/core.logic "0.8.6-SNAPSHOT"]]
   :signing {:gpg-key "A4D5C342"}
