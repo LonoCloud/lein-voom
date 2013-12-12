@@ -8,7 +8,8 @@
   :dependencies [[clj-glob "1.0.0"]
                  [lonocloud/synthread "1.0.5"]
                  [org.clojure/data.fressian "0.2.0"]
-                 [org.clojure/core.logic "0.8.6-SNAPSHOT"]]
+                 [org.clojure/core.logic "0.8.6-SNAPSHOT"]
+                 [org.apache.maven/maven-artifact "3.1.1"]]
   :signing {:gpg-key "A4D5C342"}
   :repositories [["sonatype-snapshot" "http://oss.sonatype.org/content/repositories/snapshots"]]
   :eval-in-leiningen true)

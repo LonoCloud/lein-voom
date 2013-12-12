@@ -21,6 +21,7 @@
            [java.io File FileInputStream FileOutputStream OutputStreamWriter
             Closeable]
            [java.util.logging Logger Handler Level]
+           [org.apache.maven.artifact.versioning DefaultArtifactVersion]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
@@ -945,15 +946,16 @@
 (pldb/db-rel r-commit ^:index sha ctime parent-count parents)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
 (pldb/db-rel r-commit-path ^:index sha ^:index path)
-(pldb/db-rel r-proj ^:index sha ^:index path ^:index proj-name vmajor vminor vinc vqual has-snaps?)
+(pldb/db-rel r-proj ^:index sha ^:index path ^:index proj-name
+             vmajor vminor vinc vbuild vqual has-snaps?)
 
 (defn sem-ver-parse [ver-str]
-  (let [vparts (re-matches #"(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)-)?(.*)" ver-str)
-        [vqual & vnums] (reverse (filter identity (next vparts)))
-        [vmajor vminor vinc] (map #(if (and (string? %) (re-matches #"[0-9]*" %))
-                                     (Integer/parseInt %)
-                                     %) (reverse vnums))]
-    [vmajor vminor vinc vqual]))
+  (let [dav (DefaultArtifactVersion. ver-str)]
+    [(.getMajorVersion dav)
+     (.getMinorVersion dav)
+     (.getIncrementalVersion dav)
+     (.getBuildNumber dav)
+     (.getQualifier dav)]))
 
 (defn exported-commits
   [gitdir tip-shas seen-shas]
@@ -1004,11 +1006,11 @@
   [gitdir blob-sha]
   (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
     (let [proj-name (symbol (:group proj) (:name proj))
-          has-snaps? (some #(.contains ^String % "-SNAPSHOT")
-                           (map second (:dependencies proj)))
-          [vmajor vminor vinc vqual] (sem-ver-parse (:version proj))]
-      [proj-name vmajor vminor vinc vqual has-snaps?])
-    [nil nil nil nil nil nil]))
+          has-snaps? (boolean (some #(.contains ^String % "-SNAPSHOT")
+                                    (map second (:dependencies proj))))
+          [vmajor vminor vinc vbuild vqual] (sem-ver-parse (:version proj))]
+      [proj-name vmajor vminor vinc vbuild vqual has-snaps?])
+    [nil nil nil nil nil nil nil]))
 
 (defn add-git-facts
   [db gitdir]
@@ -1036,7 +1038,7 @@
             (->/for [parent (:parents commit)]
               (pldb/db-fact r-commit-parent (:sha commit) parent))
             (->/for [[path file-sha] (:paths commit)]
-              (->/when-let [[_ dir] (re-matches #"(.*/|^)project.clj" path)]
+              (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
                 (->/apply pldb/db-fact r-proj (:sha commit) dir
                           (proj-fact-tail gitdir file-sha))))
             (->/for [dir-path (set (mapcat (fn [path]
@@ -1048,7 +1050,7 @@
                                            (keys (:paths commit))))]
               (pldb/db-fact r-commit-path (:sha commit) dir-path))))))))
 
-(def voomdb-header "voom-db-1")
+(def voomdb-header "voom-db-2")
 
 (defn ^File git-db-file
   [gitdir]
@@ -1128,6 +1130,7 @@
   (def xdb3 (vdb/from-reldata [r-tree] (fress/read (fress/write (vdb/to-reldata xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
+  (time (def db (add-git-facts pldb/empty-db (io/file voom-repos "lein-voom"))))
   (time (def db (updated-git-db (io/file voom-repos "lein-voom"))))
   (time (def db2 (updated-git-db (io/file voom-repos "lein-voom"))))
 
@@ -1165,7 +1168,7 @@
                              (l/fresh [p M m i q s p2 M2 m2 i2 q2 s2 tpath tsha osha oosha otsha bsha stsha ostsha ootsha oostsha oobsha ptpath thing]
                                       ;; For commit SHA, find the location and version of PNAME
                                       (r-commit sha (_) tsha)
-                                      (r-proj bsha pname M m i q s)
+                                      (r-proj bsha pname M m i b q s)
                                       (obj-patho tsha () "project.clj" :blob bsha tpath)
                                       ;; Locate the project directory
                                       (l/conso thing ptpath tpath)
@@ -1182,8 +1185,8 @@
                                       (l/!= ostsha oostsha)
                                       ;; Find the project details
                                       (obj-patho ootsha () "project.clj" :blob oobsha tpath)
-                                      (r-proj oobsha (_) M2 m2 i2 q2 s2)
-                                      (l/== a [tpath sha osha oobsha [p M m i q s] [p2 M2 m2 i2 q2 s2]])
+                                      (r-proj oobsha (_) M2 m2 i2 b2 q2 s2)
+                                      (l/== a [tpath sha osha oobsha [p M m i b q s] [p2 M2 m2 i2 b2 q2 s2]])
                                       ))))))]
      (prn f)))
 
@@ -1203,9 +1206,9 @@
                      (r-tree otherdir dirname :tree proj-dir-sha))))
   (pldb/with-db db3
     (l/run 5 [q]
-           (l/fresh [a b c d e f g]
-                    (r-proj a b c d e f g)
-                    (l/== q [a b c d e f g]))))
+           (l/fresh [a b c d e f g h i]
+                    (r-proj a b c d e f g h i)
+                    (l/== q [a b c d e f g h i]))))
   )
 
 
