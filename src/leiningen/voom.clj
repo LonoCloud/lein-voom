@@ -967,6 +967,32 @@
       (->> (reductions #(str %1 "/" %2)))
       (conj "")))
 
+(defn file-path-merges
+  [parents]
+  (->> parents
+       (mapcat #(into #{} (mapcat sub-paths %)))
+       (reduce #(update-in % [%2] (fnil inc 0)) {})
+       (filter #(< 1 (val %)))
+       (map first)))
+
+(defn merged-paths
+  [gitdir sha]
+  ;; TODO How to properly handle project file deletions?
+  (->> (git {:gitdir gitdir} "log" "-1" "-m"
+            "--name-status" "--pretty=format:--" sha)
+       :lines
+       (remove #{""})
+       (map #(s/replace % #"^[ADM]\t" ""))
+       (partition-by #{"--"})
+       (remove #{'("--")})
+       file-path-merges
+       (map #(-> (git {:gitdir gitdir}
+                      "rev-parse" (str sha ":" %))
+                 :out
+                 s/trim
+                 (->> (vector %))))
+       (into {})))
+
 (defn exported-commits
   [gitdir tip-shas seen-shas]
   (let [marks-file (File/createTempFile "marks" ".txt")]
@@ -979,7 +1005,13 @@
             marks (into {}
                         (map #(let [[mark sha] (s/split % #" ")]
                                 [mark (sha/mk sha)])
-                             (re-seq #"(?m)^.*$" (slurp marks-file))))]
+                             (re-seq #"(?m)^.*$" (slurp marks-file))))
+            merge-commit-fn (fn [cmd commit]
+                              (if (= cmd "merge")
+                                (-> commit
+                                    (assoc :merge true)
+                                    (assoc :paths (merged-paths gitdir (-> commit :sha str))))
+                                commit))]
         (with-open [rdr (-> out
                             java.io.ByteArrayInputStream.
                             (java.io.InputStreamReader. "ISO-8859-1")
@@ -999,12 +1031,15 @@
                                             (assoc commit :ctime))
                            "data" (do (.skip rdr (Long/parseLong more-line))
                                       commit)
-                           ("from" "merge") (update-in commit [:parents]
-                                                       (fnil conj [])
-                                                       (marks more-line))
-                           "M" (let [[_ sha path] (s/split more-line #" " 3)]
-                                 (update-in commit [:paths]
-                                            assoc path (sha/mk sha)))
+                           ("from" "merge") (let [commit (merge-commit-fn cmd commit)]
+                                              (update-in commit [:parents]
+                                                         (fnil conj [])
+                                                         (marks more-line)))
+                           "M" (if (:merge commit)
+                                 commit
+                                 (let [[_ sha path] (s/split more-line #" " 3)]
+                                   (update-in commit [:paths]
+                                              assoc path (sha/mk sha))))
                            "D" (update-in commit [:paths] assoc more-line nil)
                            (do (println "Unparsed:" line)
                                commit)))))
