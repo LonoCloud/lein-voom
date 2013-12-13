@@ -8,6 +8,7 @@
             [clojure.data.fressian :as fress]
             [clojure.core.logic.pldb :as pldb]
             [clojure.core.logic :as l]
+            [clojure.walk :as walk]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
             [leiningen.voom.long-sha :as sha :only [mk]]
@@ -1141,6 +1142,24 @@
   [_]
   (time (p-repos (fn [p] (updated-git-db p)))))
 
+(defmacro q
+  [db & args]
+  (let [[count [rfresh & body]] (if (-> args first number?)
+                                  ((juxt first rest) args)
+                                  [nil args])
+        run-mode (if count
+                   '[l/run count]
+                   '[l/run*])
+        body (walk/postwalk #(if (= % '_)
+                               '(l/lvar)
+                               %)
+                            body)]
+    `(pldb/with-db ~db
+       (~@run-mode ~rfresh
+                   ~@body))))
+
+;; ===== relational queries =====
+
 #_
 (def obj-patho
   (l/tabled [tree-sha so-far fname ftype fsha tree-path]
@@ -1185,6 +1204,13 @@
                         (obj-patho p-tree-sha nil fname :blob p-obj-sha tree-path)
                         (obj-patho tree-sha nil fname :blob obj-sha tree-path)
                         (l/!= obj-sha p-obj-sha)))))))
+
+  ;; find merges involving projects
+  (time
+   (into #{}
+    (q db2 [s q]
+       (r-commit s _ 2 _)
+       (r-proj s _ q _ _ _ _ _ _))))
 
   (time
    (let [c (sha/mk "612e0705de7ff991aa65b910ed0820adabd1d921") ; for large test repo
