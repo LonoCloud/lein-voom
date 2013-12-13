@@ -958,6 +958,15 @@
      (.getBuildNumber dav)
      (.getQualifier dav)]))
 
+(defn sub-paths
+  "Turns path 'foo/bar/baz/quux' into:
+  ['' 'foo' 'foo/bar' 'foo/bar/baz' 'foo/bar/baz/quux']"
+  [path]
+  (-> path
+      (s/split #"/")
+      (->> (reductions #(str %1 "/" %2)))
+      (conj "")))
+
 (defn exported-commits
   [gitdir tip-shas seen-shas]
   (let [marks-file (File/createTempFile "marks" ".txt")]
@@ -1042,13 +1051,7 @@
               (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
                 (->/apply pldb/db-fact r-proj (:sha commit) dir
                           (proj-fact-tail gitdir file-sha))))
-            (->/for [dir-path (set (mapcat (fn [path]
-                                             (let [parts (drop-last
-                                                          (s/split path #"/"))]
-                                               (if (empty? parts)
-                                                 [""]
-                                                 (reductions #(str %1 "/" %2) parts))))
-                                           (keys (:paths commit))))]
+            (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
               (pldb/db-fact r-commit-path (:sha commit) dir-path))))))))
 
 (def voomdb-header "voom-db-2")
