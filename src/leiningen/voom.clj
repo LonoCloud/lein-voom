@@ -922,6 +922,7 @@
   [_]
   (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p)))))
 
+;; ===== Git import =====
 
 (defn git-commits
   [gitdir & args]
@@ -1156,12 +1157,85 @@
                (ancestoro c p)
                (l/== q true))))))
 
+  (time
+   (let [_ l/lvar]
+     (doall
+      (pldb/with-db db2
+        (l/run* [q]
+                (r-proj (_) q (_) (_) (_) (_) (_)))))))
+  (time
+   (count
+    (into #{}
+          (let [_ l/lvar]
+            (doall
+             (pldb/with-db db2
+               (l/run* [p M m i s]
+                       (r-proj (_) p M m i (_) s)
+                       (l/pred p #(.startsWith (str %) "lono")))))))))
+
+  (time
+   (doseq [f
+           (into #{}
+                 (let [_ l/lvar
+                       sha (sha/mk "36bb052caf1d560448dfd9e3c81e19d8e210f1a1")
+                       pname 'b2b/b2b-server]
+                   (doall
+                    (pldb/with-db db2
+                      (l/run 20 [A]
+                             (l/fresh [p M m i q s p2 M2 m2 i2 q2 s2 tpath tsha osha otsha bsha obsha oosha ootsha oobsha]
+                                      ;; For commit SHA, find the location and version of PNAME
+                                      (r-commit sha (_) tsha)
+                                      (r-proj bsha pname M m i q s)
+                                      (obj-patho tsha () "project.clj" :blob bsha tpath)
+                                      ;; Find an ancestor of SHA with a project at the same location
+                                      (ancestoro sha osha)
+                                      (r-commit osha (_) otsha)
+                                      (obj-patho otsha () "project.clj" :blob obsha tpath)
+                                      ;; Where the very previous commit at this location has a different project.clj blob
+                                      (r-commit-parent osha oosha)
+                                      (r-commit oosha (_) ootsha)
+                                      (l/!= obsha oobsha)
+                                      (obj-patho ootsha () "project.clj" :blob oobsha tpath)
+                                      ;; And found project.clj is also different from the current
+                                      (r-proj obsha pname M2 m2 i2 q2 s2)
+                                      (l/!= bsha obsha)
+                                      ;; Share the details
+                                      (l/== A [tpath osha [p M m i q s] [p2 M2 m2 i2 q2 s2]])
+                                      ))))))]
+     (prn f)))
+
+  (time
+   (doseq [f
+           (into #{}
+                 (let [_ l/lvar
+                       sha (sha/mk "36bb052caf1d560448dfd9e3c81e19d8e210f1a1")
+                       pname 'b2b/b2b-server]
+                   (doall
+                    (pldb/with-db db2
+                      (l/run 20 [a]
+                             (l/fresh [p M m i q s p2 M2 m2 i2 q2 s2 tpath tsha osha otsha bsha stsha ostsha ootsha oobsha ptpath thing]
+                                      ;; For commit SHA, find the location and version of PNAME
+                                      (r-commit sha (_) tsha)
+                                      (r-proj bsha pname M m i q s)
+                                      (obj-patho tsha () "project.clj" :blob bsha tpath)
+                                      ;; Locate the project directory
+                                      (l/conso thing ptpath tpath)
+                                      (obj-patho tsha () thing :tree stsha ptpath)
+                                      ;; Find an ancestor of SHA with a project directory at the same location
+                                      (ancestoro sha osha)
+                                      (r-commit osha (_) otsha)
+                                      (obj-patho otsha () thing :tree ostsha ptpath)
+                                      (l/!= stsha ostsha)
+                                      (l/== a [tpath sha osha [p M m i q s] [p2 M2 m2 i2 q2 s2]])
+                                      ))))))]
+     (prn f)))
+
 (time ; full
    (doseq [f
            (into #{}
                  (let [_ l/lvar
                        sha (sha/mk "36bb052caf1d560448dfd9e3c81e19d8e210f1a1")
-                       pname 'name/of-project]
+                       pname 'b2b/b2b-server]
                    (doall
                     (pldb/with-db db2
                       (l/run 20 [a]
@@ -1189,6 +1263,84 @@
                                       (l/== a [tpath sha osha oobsha [p M m i b q s] [p2 M2 m2 i2 b2 q2 s2]])
                                       ))))))]
      (prn f)))
+
+;; - where does this project live (path/repo)-wise?
+(r-proj _ ?path PNAME ?M ?m ?i ?q ?S)
+;; - what are all the versions "available" for this project?
+(r-proj _ ?path PNAME ?M ?m ?i ?q ?S)
+;; - what commits, after <this> version was introduced, change the path at the same
+(r-proj ?sha PATH PNAME M m i q S)
+
+
+(time ; next
+ (doseq [f
+         (into #{}
+               (let [_ l/lvar
+                     ;; We're starting at some ref or sha
+                     sha (sha/mk "36bb052caf1d560448dfd9e3c81e19d8e210f1a1")
+                     ;; We know what project
+                     pname 'b2b/b2b-server
+                     ;; We have some version constraint
+                     M 0
+                     m 0
+                     p]
+                 (doall
+                  (pldb/with-db db2
+                    (l/run 20 [a]
+                           (l/fresh [p M m i q s p2 M2 m2 i2 q2 s2 tpath tsha osha oosha otsha bsha stsha ostsha ootsha oostsha oobsha ptpath thing]
+                                    ;; For commit SHA, find the location and version of PNAME
+                                    (r-commit sha (_) tsha)
+                                    (r-proj bsha pname M m i q s)
+                                    (obj-patho tsha () "project.clj" :blob bsha tpath)
+                                    ;; Locate the project directory
+                                    (l/conso thing ptpath tpath)
+                                    (obj-patho tsha () thing :tree stsha ptpath)
+                                    ;; Find an ancestor of SHA with a project directory at the same location
+                                    (ancestoro sha osha)
+                                    (r-commit osha (_) otsha)
+                                    (obj-patho otsha () thing :tree ostsha ptpath)
+                                    (l/!= stsha ostsha)
+                                    ;; Where the very previous commit at this location has a different project.clj blob
+                                    (r-commit-parent osha oosha)
+                                    (r-commit oosha (_) ootsha)
+                                    (obj-patho ootsha () thing :tree oostsha ptpath)
+                                    (l/!= ostsha oostsha)
+                                    ;; Find the project details
+                                    (obj-patho ootsha () "project.clj" :blob oobsha tpath)
+                                    (r-proj oobsha (_) M2 m2 i2 q2 s2)
+                                    (l/== a [tpath sha osha oobsha [p M m i q s] [p2 M2 m2 i2 q2 s2]])
+                                    ))))))]
+   (prn f)))
+
+(time
+ (doseq [f (let [_ l/lvar
+                 pname 'b2b/b2b-server
+                 ppath '("b2b" "modules")
+                 csha (sha/mk "36bb052")]
+           (pldb/with-db db2
+             (l/run 1 [q]
+                    (l/fresh [bsha tpath tsha psha ptsha pbsha]
+                             (r-commit csha (_) tsha)
+                             (obj-patho tsha () "server" :tree bsha ppath)
+                             (ancestoro csha psha)
+                             (r-commit psha (_) ptsha)
+                             (obj-patho ptsha () "server" :tree pbsha ppath)
+                             (l/!= bsha pbsha)
+                             (l/== q [pname ppath csha ptsha])))))]
+   (prn f)))
+
+  (time
+   (identity
+    (into #{}
+          (let [_ l/lvar
+                sha (sha/mk "612e0705de7ff991aa65b910ed0820adabd1d921")]
+            (doall
+             (pldb/with-db db2
+               (l/run* [p M m i q s tpath]
+                       (l/fresh [ctime tsha bsha]
+                                (r-commit sha ctime tsha)
+                                (obj-patho tsha nil "project.clj" :blob bsha tpath)
+                                (r-proj bsha p M m i q s)))))))))
 
   (pldb/with-db db3
     (l/run 10 [obj-sha]
