@@ -1148,9 +1148,7 @@
         run-mode (if count
                    '[l/run count]
                    '[l/run*])
-        body (walk/postwalk #(if (= % '_)
-                               '(l/lvar)
-                               %)
+        body (walk/postwalk #(get '{_ (l/lvar)} % %)
                             body)]
     `(pldb/with-db ~db
        (~@run-mode ~rfresh
