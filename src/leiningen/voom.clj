@@ -22,7 +22,7 @@
            [java.io File FileInputStream FileOutputStream OutputStreamWriter
             Closeable]
            [java.util.logging Logger Handler Level]
-           [org.apache.maven.artifact.versioning DefaultArtifactVersion]
+           [org.sonatype.aether.util.version GenericVersionScheme]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
@@ -950,16 +950,7 @@
 (pldb/db-rel r-commit ^:index sha ctime parent-count parents)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
 (pldb/db-rel r-commit-path ^:index sha ^:index path)
-(pldb/db-rel r-proj ^:index sha ^:index path ^:index proj-name
-             vmajor vminor vinc vbuild vqual has-snaps?)
-
-(defn sem-ver-parse [ver-str]
-  (let [dav (DefaultArtifactVersion. ver-str)]
-    [(.getMajorVersion dav)
-     (.getMinorVersion dav)
-     (.getIncrementalVersion dav)
-     (.getBuildNumber dav)
-     (.getQualifier dav)]))
+(pldb/db-rel r-proj ^:index sha ^:index path ^:index name version has-snaps?)
 
 (defn sub-paths
   "Turns path 'foo/bar/baz/quux' into:
@@ -1055,10 +1046,9 @@
   (if-let [proj (robust-read-proj-blob gitdir blob-sha)]
     (let [proj-name (symbol (:group proj) (:name proj))
           has-snaps? (boolean (some #(.contains ^String % "-SNAPSHOT")
-                                    (map second (:dependencies proj))))
-          [vmajor vminor vinc vbuild vqual] (sem-ver-parse (:version proj))]
-      [proj-name vmajor vminor vinc vbuild vqual has-snaps?])
-    [nil nil nil nil nil nil nil]))
+                                    (map second (:dependencies proj))))]
+      [proj-name (:version proj) has-snaps?])
+    [nil nil nil]))
 
 (defn add-git-facts
   [db gitdir]
@@ -1092,7 +1082,7 @@
             (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
               (pldb/db-fact r-commit-path (:sha commit) dir-path))))))))
 
-(def voomdb-header "voom-db-2")
+(def voomdb-header "voom-db-3")
 
 (defn ^File git-db-file
   [gitdir]
@@ -1212,7 +1202,7 @@
    (into #{}
     (q db2 [s q]
        (r-commit s _ 2 _)
-       (r-proj s _ q _ _ _ _ _ _))))
+       (r-proj s _ q _ _))))
 
   (time
    (let [c (sha/mk "612e0705de7ff991aa65b910ed0820adabd1d921") ; for large test repo
@@ -1228,15 +1218,15 @@
      (doall
       (pldb/with-db db2
         (l/run* [q]
-                (r-proj (_) q (_) (_) (_) (_) (_)))))))
+                (r-proj (_) q (_) (_) (_)))))))
   (time
    (count
     (into #{}
           (let [_ l/lvar]
             (doall
              (pldb/with-db db2
-               (l/run* [p M m i s]
-                       (r-proj (_) p M m i (_) s)
+               (l/run* [p v s]
+                       (r-proj (_) p v (_) s)
                        (l/pred p #(.startsWith (str %) "lono")))))))))
 
   (time
@@ -1248,10 +1238,10 @@
                    (doall
                     (pldb/with-db db2
                       (l/run 20 [A]
-                             (l/fresh [p M m i q s p2 M2 m2 i2 q2 s2 tpath tsha osha otsha bsha obsha oosha ootsha oobsha]
+                             (l/fresh [p v s p2 v2 s2 tpath tsha osha otsha bsha obsha oosha ootsha oobsha]
                                       ;; For commit SHA, find the location and version of PNAME
                                       (r-commit sha (_) tsha)
-                                      (r-proj bsha pname M m i q s)
+                                      (r-proj bsha p pname v s)
                                       (obj-patho tsha () "project.clj" :blob bsha tpath)
                                       ;; Find an ancestor of SHA with a project at the same location
                                       (ancestoro sha osha)
@@ -1263,10 +1253,10 @@
                                       (l/!= obsha oobsha)
                                       (obj-patho ootsha () "project.clj" :blob oobsha tpath)
                                       ;; And found project.clj is also different from the current
-                                      (r-proj obsha pname M2 m2 i2 q2 s2)
+                                      (r-proj obsha p2 pname v2 s2)
                                       (l/!= bsha obsha)
                                       ;; Share the details
-                                      (l/== A [tpath osha [p M m i q s] [p2 M2 m2 i2 q2 s2]])
+                                      (l/== A [tpath osha [p v s] [p2 v2 s2]])
                                       ))))))]
      (prn f)))
 
@@ -1331,11 +1321,11 @@
      (prn f)))
 
 ;; - where does this project live (path/repo)-wise?
-(r-proj _ ?path PNAME ?M ?m ?i ?q ?S)
+(r-proj _ ?path PNAME ?v ?S)
 ;; - what are all the versions "available" for this project?
-(r-proj _ ?path PNAME ?M ?m ?i ?q ?S)
+(r-proj _ ?path PNAME ?v ?S)
 ;; - what commits, after <this> version was introduced, change the path at the same
-(r-proj ?sha PATH PNAME M m i q S)
+(r-proj ?sha PATH PNAME v S)
 
 
 (time ; next
@@ -1424,9 +1414,9 @@
                      (r-tree otherdir dirname :tree proj-dir-sha))))
   (pldb/with-db db3
     (l/run 5 [q]
-           (l/fresh [a b c d e f g h i]
-                    (r-proj a b c d e f g h i)
-                    (l/== q [a b c d e f g h i]))))
+           (l/fresh [a b c d e]
+                    (r-proj a b c d e)
+                    (l/== q [a b c d e]))))
   )
 
 
