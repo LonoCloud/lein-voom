@@ -242,7 +242,8 @@
 
 (defn install-versioned-artifact
   [proot]
-  ;; TODO: voom build-deps first, then wrap install:
+  (println "Calling recursive build-deps on:" proot)
+  (print (:out (sh "lein" "voom" "build-deps" :dir proot)))
   (let [install-cmd ["lein" "voom" "wrap" "install" :dir proot]
         _ (apply println "install-versioned-artifact:" install-cmd)
         rtn (apply sh install-cmd)]
