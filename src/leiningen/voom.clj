@@ -322,6 +322,12 @@
 
 ;; === freshen ===
 
+(let [gvs (GenericVersionScheme.)]
+  (defn version-in-range?
+    [range-str version-str]
+    (.containsVersion (.parseVersionConstraint gvs range-str)
+                      (.parseVersion gvs version-str))))
+
 (defn fetch-checkout-all
   "This is slower than necessary for most real use cases."
   [dirs]
