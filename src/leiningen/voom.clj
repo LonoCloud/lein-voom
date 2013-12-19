@@ -17,7 +17,7 @@
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
-           [java.util Date]
+           [java.util Date Arrays]
            [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter
             Closeable]
@@ -1153,6 +1153,84 @@
     `(pldb/with-db ~db
        (~@run-mode ~rfresh
                    ~@body))))
+
+;; ===== ancestry sha-bitmap (shabam) =====
+
+(def ^Long bits-per-byte 8)
+(def ^Long bytes-per-long 8)
+(def ^Long bits-per-long (* bits-per-byte bytes-per-long))
+
+(defn ^Long bm-longs [bits]
+  (long (Math/ceil (/ bits bits-per-long))))
+
+(defn ^"[J" bm-new []
+  (long-array 1))
+
+(defn ^"[J" bm-set
+  [^"[J" bm idx]
+  (let [size (max (count bm) (bm-longs idx))
+        nbm (Arrays/copyOf bm ^Long size)
+        w (quot idx bits-per-long)
+        o (mod idx bits-per-long)
+        m (bit-set 0 o)
+        v (aget nbm w)
+        nv (bit-or v ^Long m)]
+    (aset nbm w nv)
+    nbm))
+
+(defn ^Long bm-get
+  [^"[J" bm idx]
+  (when (<= (bm-longs idx) (count bm))
+    (let [w (quot idx bits-per-long)
+          o (mod idx bits-per-long)
+          m (bit-set 0 o)
+          v (aget bm w)
+          mv (bit-and v m)]
+      (pos? mv))))
+
+(defn ^"[J" bm-or
+  [& bms]
+  (if (empty? bms)
+    (bm-new)
+    (let [size (apply max (map count bms))
+          nbm (Arrays/copyOf ^"[J" (first bms) ^Long size)]
+      (doseq [bm (rest bms)
+              [i v] (map-indexed list bm)
+              :let [mv (bit-or v (aget nbm i))]]
+        (aset nbm i mv))
+      nbm)))
+
+(defn shabam-new []
+  {:sha->idx {} :bitmaps []})
+
+(defn shabam-add [shabam sha & parents]
+  (if (-> shabam :sha->idx (contains? sha))
+    shabam
+    (let [{:keys [sha->idx bitmaps]} shabam
+          nid (count sha->idx)
+          sha->idx (assoc sha->idx sha nid)
+          pidxs (map sha->idx parents)
+          nbm (if (empty? pidxs)
+                (bm-new)
+                (apply bm-or (map bitmaps pidxs)))
+          nbm (reduce bm-set nbm pidxs)
+          bitmaps (conj bitmaps nbm)]
+      {:sha->idx sha->idx
+       :bitmaps bitmaps})))
+
+(defn sha-ancestors [shabam child ancs]
+  (let [{:keys [sha->idx bitmaps]} shabam
+        cidx (sha->idx child)]
+    (filter #(bm-get (get bitmaps cidx)
+                     (sha->idx %))
+            ancs)))
+
+(defn sha-successors [shabam parent succ]
+  (let [{:keys [sha->idx bitmaps]} shabam
+        pidx (sha->idx parent)]
+    (filter #(bm-get (get bitmaps (sha->idx %))
+                     pidx)
+            succ)))
 
 ;; ===== relational queries =====
 
