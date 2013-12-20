@@ -554,77 +554,7 @@
       (prn c))
     (throw (ex-info "Failed to find version for commit." {}))))
 
-(defn newest-voom-ver-by-spec
-  [proj-name {:keys [version repo branch path allow-snaps]
-              :or {version "" allow-snaps true}}]
-  (for [gitdir (all-repos-dirs)
-        :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
-        :let [ptn (s/join "--" ["voom"
-                                (str (namespace proj-name) "%" (name proj-name))
-                                (str version "*")])
-              tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
-              tspecs (if (= tags [""])
-                       []
-                       (map parse-tag tags))
-              paths (set (map :path tspecs))]
-        found-path paths
-        :when (or (= found-path path) (nil? path))
-        found-branch (origin-branches gitdir)
-        :when (or (= found-branch branch) (nil? branch))
-        :let [;; All the tags NOT accessible via this branch (we will exclude them):
-              not-not-tags (set (mapcat #(:refs (parse-sha-refs %))
-                                        (:lines (git {:gitdir gitdir} "log" "--pretty=format:%H,%cd,%p,%d" "--all"
-                                                     "--simplify-by-decoration" "-m" (str "^origin/" found-branch)))))
-              ;; yes-yes-tags are the matching tags reachable via this branch:
-              yes-yes-tags (set/difference tags not-not-tags)
-              tags-here (filter #(= found-path (:path (parse-tag %))) yes-yes-tags)]
-        ;; If this branch contains no matching tags, the
-        ;; project+version we're looking for must not be on this
-        ;; branch. Skip it.
-        :when (seq tags-here)
-        :let [tags-here-with-parents (remove #(.endsWith ^String % "--no-parent") tags-here)
-              neg-tags (map #(str "^" % "^@") tags-here-with-parents)
-              ;; All commits on the current branch more recent than
-              ;; (and including) the most recent tag matching our
-              ;; version spec:
-              commits
-              , (map
-                 parse-sha-refs
-                 (:lines (apply git {:gitdir gitdir} "log"
-                                "--pretty=format:%H,%cd,%p,%d" "--full-history" "--reverse"
-                                (concat neg-tags [(str "origin/" found-branch) "--" found-path]))))]
-        :when (seq commits)
-        :let [refs (-> commits first :refs)
-              reflist (filter #(and
-                                (= (str proj-name) (:proj %))
-                                (= found-path (:path %)))
-                              (map parse-tag refs))
-              ver (-> reflist first :version)
-              snaps (-> reflist first :snaps)]
-        :when (or allow-snaps (not snaps))]
-    (do
-      (assert-good-version ver proj-name version tags found-branch neg-tags commits)
-      ;; Walk forward through time, looking for when the next commit
-      ;; is one too far (meaning: we have no further commits to
-      ;; consider or the project at this path has changed version or
-      ;; project name):
-      (some (fn [[current next-commit]]
-              (when (or (= :end next-commit)
-                        ;; Find if any of the refs of this commit are
-                        ;; voom tags at the same path:
-                        (some #(let [t (parse-tag %)]
-                                 (and
-                                  (= "voom" (:prefix t))
-                                  (= found-path (:path t))))
-                              (:refs next-commit)))
-                {:sha (:sha current)
-                 :ctime (:ctime current)
-                 :version ver
-                 :path found-path
-                 :proj proj-name
-                 :gitdir gitdir
-                 :branch found-branch}))
-            (partition 2 1 (concat commits [:end]))))))
+(declare newest-voom-ver-by-spec)
 
 (defn print-repo-infos
   [repo-infos]
@@ -786,7 +716,8 @@
 (defn box-repo-add
   [{:keys [gitdir branch sha proj path]}]
   (if-let [bdir (find-box)]
-    (let [pname (-> (str proj)
+    (let [sha (str sha)
+          pname (-> (str proj)
                     (s/replace #"/" "--"))
           pdir (adj-path bdir pname)
           checkout (adj-path bdir task-dir pname)
@@ -1285,7 +1216,7 @@
   (when (seq xs)
     (reduce #(if (neg? (compare %1 %2)) %2 %1) xs)))
 
-(defn marked-newest-voom-ver-by-spec
+(defn newest-voom-ver-by-spec
 "
   proj dir change -> commit where a change happened in a subtree rooted with a project.clj
   - mark all project directory changes with project.clj version info
@@ -1348,83 +1279,6 @@
     {:sha sha
      :ctime ctime
      :version max-ver-d
-     :path found-path
-     :proj proj-name
-     :gitdir gitdir
-     :branch found-branch}))
-
-
-;; ===== point filtering query =====
-
-#_
-(defn bm-newest-voom-ver-by-spec
-"
-- given a particular projname at a path and version criteria
-- for each branch separately
-- find stop points matching projname, path and version criteria (oldver matches, newver doesn't)
-- find start points matching projname, path and version criteria (newver matches, oldver don't care)
-- find project paths matching path
-- find stop points, parenter to branch
-- find start points, parenter to branch
-- find project paths, parenter to branch
-- find project paths, childer to some start point and not childer to any stop point
-- find project paths with no childer project paths
-"
-  [db shabam proj-name {:keys [version repo branch path allow-snaps]
-                     :or {version "" allow-snaps true}}]
-  (for [gitdir (all-repos-dirs)
-        :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
-        :let [ptn (s/join "--" ["voom"
-                                (str (namespace proj-name) "%" (name proj-name))
-                                (str version "*")])
-              tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
-              tspecs (if (= tags [""])
-                       []
-                       (map parse-tag tags))
-              paths (set (map :path tspecs))]
-        found-path paths
-        :when (or (= found-path path) (nil? path))
-        found-branch (origin-branches gitdir)
-        :when (or (= found-branch branch) (nil? branch))
-        :let [branch-sha (first (q db [?sha] (r-branch repo found-branch ?sha)))
-              not-matches-spec? (complement version-in-range?) ;; needed for l/pred
-              ver-stop-pts (->>
-                            (q db [?sha]
-                               (l/fresh [ver pver]
-                                        (r-proj ?sha found-path proj-name ver pver _)
-                                        (l/pred not-matches-spec? [version ver])
-                                        (l/pred version-in-range? [version pver])))
-                            (into #{}))
-              {:keys [snap-stop-pts all-start-pts]}
-              , (->>
-                 (q db [?sha ?snaps]
-                    (l/fresh [ver]
-                             (r-proj ?sha found-path proj-name ver _ ?snaps)
-                             (l/pred version-in-range? [version ver])))
-                 (group-by second)
-                 (map (fn [[k v]]
-                        [(get {true :snap-stop-pts} k :all-start-pts)
-                         v])))
-              all-stop-pts (into #{} (concat ver-stop-pts snap-stop-pts))
-              all-proj-pts (->>
-                            (q db [?sha] (r-commit-path ?sha found-path))
-                            (into #{}))
-              branch-stop-pts (sha-ancestors shabam branch-sha all-stop-pts)
-              branch-start-pts (sha-ancestors shabam branch-sha all-start-pts)
-              branch-proj-pts (sha-ancestors shabam branch-sha all-proj-pts)
-              ;; need to consider stops that are successor of each found start point
-              valid-proj-pts (filter #(and (< 0 (sha-successors shabam % branch-start-pts))
-                                           (= 0 (sha-successors shabam % branch-stop-pts)))
-                               branch-proj-pts)
-              ;; Do we find starting points if they are the most recent thing?...
-              latest-proj-pts (filter #(= 0 (sha-successors shabam % valid-proj-pts))
-                               valid-proj-pts)]
-        sha latest-proj-pts
-        :let [ctime (first (q db [ctime] (r-commit sha ctime _ _)))
-              ver (:version (robust-read-project gitdir sha found-path))]]
-    {:sha sha
-     :ctime ctime
-     :version ver
      :path found-path
      :proj proj-name
      :gitdir gitdir
