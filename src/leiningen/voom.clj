@@ -1052,6 +1052,7 @@
                    '[l/run*])
         body (walk/postwalk #(get '{_ (l/lvar)} % %)
                             body)]
+    ;; TODO: consider handling rfresh as map to get map results back
     `(pldb/with-db ~db
        (~@run-mode ~rfresh
                    ~@body))))
