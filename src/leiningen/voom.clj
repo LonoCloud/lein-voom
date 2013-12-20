@@ -1005,7 +1005,7 @@
   (-> shabam :sha->idx (contains? sha)))
 
 (defn shabam-add [shabam sha & parents]
-  (if (shabam-contains? sha)
+  (if (shabam-contains? shabam sha)
     shabam
     (let [{:keys [sha->idx bitmaps]} shabam
           nid (count sha->idx)
