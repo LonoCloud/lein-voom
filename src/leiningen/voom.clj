@@ -1236,7 +1236,7 @@
                                java.util.zip.GZIPInputStream.
                                (fress/read :handlers sha/read-handlers))]
     (if (= header voomdb-header)
-      {:shabam shabam
+      {:shabam (update-in shabam [:bitmaps] vec)
        :pldb
        , (vdb/from-reldata
           [r-branch r-commit r-commit-parent r-commit-path r-proj-path r-proj]
