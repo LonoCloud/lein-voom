@@ -1238,6 +1238,80 @@
   (time (p-repos (fn [p] (updated-git-db p)))))
 
 
+;; ===== point filtering query =====
+
+(defn bm-newest-voom-ver-by-spec
+"
+- given a particular projname at a path and version criteria
+- for each branch separately
+- find stop points matching projname, path and version criteria (oldver matches, newver doesn't)
+- find start points matching projname, path and version criteria (newver matches, oldver don't care)
+- find project paths matching path
+- find stop points, parenter to branch
+- find start points, parenter to branch
+- find project paths, parenter to branch
+- find project paths, childer to some start point and not childer to any stop point
+- find project paths with no childer project paths
+"
+  [db shabam proj-name {:keys [version repo branch path allow-snaps]
+                     :or {version "" allow-snaps true}}]
+  (for [gitdir (all-repos-dirs)
+        :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
+        :let [ptn (s/join "--" ["voom"
+                                (str (namespace proj-name) "%" (name proj-name))
+                                (str version "*")])
+              tags (set (:lines (git {:gitdir gitdir} "tag" "--list" ptn)))
+              tspecs (if (= tags [""])
+                       []
+                       (map parse-tag tags))
+              paths (set (map :path tspecs))]
+        found-path paths
+        :when (or (= found-path path) (nil? path))
+        found-branch (origin-branches gitdir)
+        :when (or (= found-branch branch) (nil? branch))
+        :let [branch-sha (first (q db [?sha] (r-branch repo found-branch ?sha)))
+              not-matches-spec? (complement version-in-range?) ;; needed for l/pred
+              ver-stop-pts (->>
+                            (q db [?sha]
+                               (l/fresh [ver pver]
+                                        (r-proj ?sha found-path proj-name ver pver _)
+                                        (l/pred not-matches-spec? [version ver])
+                                        (l/pred version-in-range? [version pver])))
+                            (into #{}))
+              {:keys [snap-stop-pts all-start-pts]}
+              , (->>
+                 (q db [?sha ?snaps]
+                    (l/fresh [ver]
+                             (r-proj ?sha found-path proj-name ver _ ?snaps)
+                             (l/pred version-in-range? [version ver])))
+                 (group-by second)
+                 (map (fn [[k v]]
+                        [(get {true :snap-stop-pts} k :all-start-pts)
+                         v])))
+              all-stop-pts (into #{} (concat ver-stop-pts snap-stop-pts))
+              all-proj-pts (->>
+                            (q db [?sha] (r-commit-path ?sha found-path))
+                            (into #{}))
+              branch-stop-pts (sha-ancestors shabam branch-sha all-stop-pts)
+              branch-start-pts (sha-ancestors shabam branch-sha all-start-pts)
+              branch-proj-pts (sha-ancestors shabam branch-sha all-proj-pts)
+              ;; need to consider stops that are successor of each found start point
+              valid-proj-pts (filter #(and (< 0 (sha-successors shabam % branch-start-pts))
+                                           (= 0 (sha-successors shabam % branch-stop-pts)))
+                               branch-proj-pts)
+              ;; Do we find starting points if they are the most recent thing?...
+              latest-proj-pts (filter #(= 0 (sha-successors shabam % valid-proj-pts))
+                               valid-proj-pts)]
+        sha latest-proj-pts
+        :let [ctime (first (q db [ctime] (r-commit sha ctime _ _)))
+              ver (:version (robust-read-project gitdir sha found-path))]]
+    {:sha sha
+     :ctime ctime
+     :version ver
+     :path found-path
+     :proj proj-name
+     :gitdir gitdir
+     :branch found-branch}))
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
                #'retag-all-repos #'update-repo-dbs #'ver-parse #'wrap])
