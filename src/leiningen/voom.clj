@@ -1155,17 +1155,18 @@
 
 (defn add-commit-facts
   [pldb gitdir commit]
-  (-> pldb
-      (pldb/db-fact r-commit (:sha commit) (:ctime commit)
-                    (count (:parents commit)) (:parents commit))
-      (->/for [parent (:parents commit)]
-        (pldb/db-fact r-commit-parent (:sha commit) parent))
-      (->/for [[path file-sha] (:paths commit)]
-        (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
-          (->/apply pldb/db-fact
-                    r-proj (:sha commit) dir (proj-fact-tail gitdir file-sha))))
-      (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
-        (pldb/db-fact r-commit-path (:sha commit) dir-path))))
+  (let [sha (:sha commit)]
+    (-> pldb
+        (pldb/db-fact r-commit sha (:ctime commit)
+                      (count (:parents commit)) (:parents commit))
+        (->/for [parent (:parents commit)]
+          (pldb/db-fact r-commit-parent sha parent))
+        (->/for [[path file-sha] (:paths commit)]
+          (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
+            (->/apply pldb/db-fact
+                      r-proj sha dir (proj-fact-tail gitdir file-sha))))
+        (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
+          (pldb/db-fact r-commit-path sha dir-path)))))
 
 (defn build-shabam
   [{:keys [shabam pldb]} tips]
