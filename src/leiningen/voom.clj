@@ -1153,39 +1153,67 @@
       [proj-name (:version proj) has-snaps?])
     [nil nil nil]))
 
+(defn add-commit-facts
+  [pldb gitdir commit]
+  (-> pldb
+      (pldb/db-fact r-commit (:sha commit) (:ctime commit)
+                    (count (:parents commit)) (:parents commit))
+      (->/for [parent (:parents commit)]
+        (pldb/db-fact r-commit-parent (:sha commit) parent))
+      (->/for [[path file-sha] (:paths commit)]
+        (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
+          (->/apply pldb/db-fact
+                    r-proj (:sha commit) dir (proj-fact-tail gitdir file-sha))))
+      (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
+        (pldb/db-fact r-commit-path (:sha commit) dir-path))))
+
+(defn build-shabam
+  [{:keys [shabam pldb]} tips]
+  (loop [shabam shabam, stack (vec tips)]
+    (if-let [frame (peek stack)]
+      (if (vector? frame)
+        ;; parents all added themselves
+        (recur
+         (apply shabam-add shabam frame)
+         (pop stack))
+        ;; no parents checked yet
+        (if (shabam-contains? shabam frame)
+          (recur shabam (pop stack)) ;; I'm in db. Done.
+          (let [parents (seq
+                         (q pldb [par]
+                            (r-commit-parent frame par)))]
+            (recur shabam
+                   (-> stack
+                       (conj (into [frame] parents)) ;; to add myself later
+                       (into parents)))))) ;; have parents check themselves
+      {:shabam shabam :pldb pldb})))
+
 (defn add-git-facts
   [db gitdir]
   (-> db
     (->/let [old-branches (into {} (map (comp vec next)
-                                        (vdb/get-facts db r-branch)))
+                                        (vdb/get-facts (:pldb db) r-branch)))
              new-branches (zipmap
                            (origin-branches gitdir)
                            (map sha/mk (origin-branches gitdir :sha? true)))]
       (->/when (not= old-branches new-branches)
         (->/let [repo (-> (remotes gitdir) :origin :fetch)]
-          (vary-meta assoc ::dirty true)
 
           ;; Update branchs
           (->/for [[name sha] old-branches]
-            (pldb/db-retraction r-branch repo name sha))
+            (update-in [:pldb] pldb/db-retraction r-branch repo name sha))
           (->/for [[name sha] new-branches]
-            (pldb/db-fact r-branch repo name sha))
+            (update-in [:pldb] pldb/db-fact r-branch repo name sha))
 
           ;; Add commits
           (->/for [commit (exported-commits
                            gitdir (vals new-branches) (vals old-branches))]
-            (pldb/db-fact r-commit (:sha commit) (:ctime commit)
-                          (count (:parents commit)) (:parents commit))
-            (->/for [parent (:parents commit)]
-              (pldb/db-fact r-commit-parent (:sha commit) parent))
-            (->/for [[path file-sha] (:paths commit)]
-              (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
-                (->/apply pldb/db-fact r-proj (:sha commit) dir
-                          (proj-fact-tail gitdir file-sha))))
-            (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
-              (pldb/db-fact r-commit-path (:sha commit) dir-path))))))))
+            (->/assoc :pldb (add-commit-facts gitdir commit)))
 
-(def voomdb-header "voom-db-3")
+          (build-shabam (vals new-branches))
+          (vary-meta assoc ::dirty true))))))
+
+(def voomdb-header "voom-db-4")
 
 (defn ^File git-db-file
   [gitdir]
@@ -1194,19 +1222,22 @@
 (defn read-git-db
   [gitdir]
   (let [file (git-db-file gitdir)
-        [header & reldata] (-> file
+        [header & [shabam & reldata]] (-> file
                                io/input-stream
                                java.util.zip.GZIPInputStream.
                                (fress/read :handlers sha/read-handlers))]
     (if (= header voomdb-header)
-      (vdb/from-reldata
-       [r-branch r-commit r-commit-parent r-commit-path r-proj]
-       reldata)
+      {:shabam shabam
+       :pldb
+       , (vdb/from-reldata
+          [r-branch r-commit r-commit-parent r-commit-path r-proj]
+          reldata)}
       (do
         (println "Existing voomdb file for" (str gitdir)
                  "has wrong header" header "needed:"
                  voomdb-header)
-        pldb/empty-db))))
+        {:shabam (shabam-new)
+         :pldb pldb/empty-db}))))
 
 (defn write-git-db
   [db gitdir]
@@ -1217,14 +1248,15 @@
                                 :handlers sha/write-handlers))]
     (fress/begin-open-list w)
     (fress/write-object w voomdb-header)
-    (doseq [item (vdb/to-reldata db)]
+    (fress/write-object w (:shabam db))
+    (doseq [item (vdb/to-reldata (:pldb db))]
       (fress/write-object w item))))
 
 (defn updated-git-db
   [gitdir]
   (let [db (-> (if (.exists (git-db-file gitdir))
                  (read-git-db gitdir)
-                 pldb/empty-db)
+                 {:shabam (shabam-new) :pldb pldb/empty-db})
                (add-git-facts gitdir))]
     (when (::dirty (meta db))
       (write-git-db db gitdir))
@@ -1344,7 +1376,9 @@
   (def xdb3 (vdb/from-reldata [r-tree] (fress/read (fress/write (vdb/to-reldata xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
-  (time (def db (add-git-facts pldb/empty-db (io/file voom-repos "lein-voom"))))
+  (time (def db (add-git-facts {:shabam (shabam-new)
+                                :pldb pldb/empty-db}
+                               (io/file voom-repos "lein-voom"))))
   (time (def db (updated-git-db (io/file voom-repos "lein-voom"))))
   (time (def db2 (updated-git-db (io/file voom-repos "lonocore"))))
   )
