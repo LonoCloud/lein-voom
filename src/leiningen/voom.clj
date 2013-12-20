@@ -1273,6 +1273,7 @@
 
 ;; ===== point filtering query =====
 
+#_
 (defn bm-newest-voom-ver-by-spec
 "
 - given a particular projname at a path and version criteria
