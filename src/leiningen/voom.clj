@@ -1157,9 +1157,8 @@
 (defn add-commit-facts
   [pldb gitdir commit]
   (let [sha (:sha commit)]
-    (-> pldb
-        (pldb/db-fact r-commit sha (:ctime commit)
-                      (count (:parents commit)) (:parents commit))
+    (-> pldb (pldb/db-fact r-commit sha (:ctime commit)
+                           (count (:parents commit)))
         (->/for [parent (:parents commit)]
           (pldb/db-fact r-commit-parent sha parent))
         (->/for [[mode otype bsha path]
