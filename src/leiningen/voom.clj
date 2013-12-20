@@ -1036,10 +1036,11 @@
 ;; ===== relation database tables =====
 
 (pldb/db-rel r-branch repo-path branch-name sha)
-(pldb/db-rel r-commit ^:index sha ctime parent-count parents)
+(pldb/db-rel r-commit ^:index sha ctime parent-count)
 (pldb/db-rel r-commit-parent ^:index sha ^:index parent-sha)
 (pldb/db-rel r-commit-path ^:index sha ^:index path)
-(pldb/db-rel r-proj ^:index sha ^:index path ^:index name version has-snaps?)
+(pldb/db-rel r-proj-path ^:index sha ^:index path ^:index blob-sha)
+(pldb/db-rel r-proj ^:index blob-sha ^:index name version has-snaps?)
 
 (defmacro q
   [db & args]
@@ -1161,12 +1162,20 @@
                       (count (:parents commit)) (:parents commit))
         (->/for [parent (:parents commit)]
           (pldb/db-fact r-commit-parent sha parent))
-        (->/for [[path file-sha] (:paths commit)]
-          (->/when-let [[_ dir] (re-matches #"(.*)(^|/)project.clj" path)]
-            (->/apply pldb/db-fact
-                      r-proj sha dir (proj-fact-tail gitdir file-sha))))
+        (->/for [[mode bsha stage path]
+                 , (->> (git {:gitdir gitdir}
+                             "ls-files" "--stage" (str sha)
+                             "--" "project.clj" "**/project.clj")
+                        :lines
+                        (map #(s/split % #"\s+" 4)))
+                   :let [blob-sha (sha/mk bsha)]]
+          (->/as pldb
+            (pldb/db-fact r-proj-path sha (.intern ^String path) blob-sha)
+            (->/when-not (first (q pldb [x] (r-proj blob-sha _ _ _) (l/== x true)))
+              (->/apply pldb/db-fact
+                        r-proj blob-sha (proj-fact-tail gitdir blob-sha)))))
         (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
-          (pldb/db-fact r-commit-path sha dir-path)))))
+          (pldb/db-fact r-commit-path sha (.intern ^String dir-path))))))
 
 (defn build-shabam
   [{:keys [shabam pldb]} tips]
@@ -1214,7 +1223,7 @@
           (build-shabam (vals new-branches))
           (vary-meta assoc ::dirty true))))))
 
-(def voomdb-header "voom-db-4")
+(def voomdb-header "voom-db-5")
 
 (defn ^File git-db-file
   [gitdir]
@@ -1231,7 +1240,7 @@
       {:shabam shabam
        :pldb
        , (vdb/from-reldata
-          [r-branch r-commit r-commit-parent r-commit-path r-proj]
+          [r-branch r-commit r-commit-parent r-commit-path r-proj-path r-proj]
           reldata)}
       (do
         (println "Existing voomdb file for" (str gitdir)
