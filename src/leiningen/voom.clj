@@ -1169,12 +1169,12 @@
                         (map #(s/split % #"\s+" 4)))
                    :let [blob-sha (sha/mk bsha)]]
           (->/as pldb
-            (pldb/db-fact r-proj-path sha (.intern ^String path) blob-sha)
+            (pldb/db-fact r-proj-path sha (s/replace path #"(^|/)project.clj$" "") blob-sha)
             (->/when-not (first (q pldb [x] (r-proj blob-sha _ _ _) (l/== x true)))
               (->/apply pldb/db-fact
                         r-proj blob-sha (proj-fact-tail gitdir blob-sha)))))
         (->/for [dir-path (set (mapcat sub-paths (keys (:paths commit))))]
-          (pldb/db-fact r-commit-path sha (.intern ^String dir-path))))))
+          (pldb/db-fact r-commit-path sha dir-path)))))
 
 (defn build-shabam
   [{:keys [shabam pldb]} tips]
@@ -1222,7 +1222,7 @@
           (build-shabam (vals new-branches))
           (vary-meta assoc ::dirty true))))))
 
-(def voomdb-header "voom-db-5")
+(def voomdb-header "voom-db-6")
 
 (defn ^File git-db-file
   [gitdir]
