@@ -988,7 +988,6 @@
 
 (defn ^"[J" bm-or
   [& bms]
-  (prn (map type bms))
   (if (empty? bms)
     (bm-new)
     (let [size (apply max (map count bms))
@@ -1014,10 +1013,7 @@
           pidxs (map sha->idx parents)
           nbm (if (empty? pidxs)
                 (bm-new)
-                (do
-                  (clojure.pprint/pprint bitmaps)
-                  (prn :shabam-add parents pidxs (map bitmaps pidxs))
-                  (apply bm-or (map bitmaps pidxs))))
+                (apply bm-or (map bitmaps pidxs)))
           nbm (reduce bm-set nbm pidxs)
           bitmaps (conj bitmaps nbm)]
       {:sha->idx sha->idx
