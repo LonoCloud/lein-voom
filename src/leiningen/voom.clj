@@ -1162,11 +1162,11 @@
                       (count (:parents commit)) (:parents commit))
         (->/for [parent (:parents commit)]
           (pldb/db-fact r-commit-parent sha parent))
-        (->/for [[mode bsha stage path]
+        (->/for [[mode otype bsha path]
                  , (->> (git {:gitdir gitdir}
-                             "ls-files" "--stage" (str sha)
-                             "--" "project.clj" "**/project.clj")
+                             "ls-tree" "-r" "--full-tree" (str sha))
                         :lines
+                        (filter #(re-find #"(^|/)project.clj$" %))
                         (map #(s/split % #"\s+" 4)))
                    :let [blob-sha (sha/mk bsha)]]
           (->/as pldb
