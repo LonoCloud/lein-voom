@@ -1279,6 +1279,80 @@
   [_]
   (time (p-repos (fn [p] (updated-git-db p)))))
 
+;; ===== latest version querying =====
+
+(defn compare-max [& xs]
+  (when (seq xs)
+    (reduce #(if (neg? (compare %1 %2)) %2 %1) xs)))
+
+(defn marked-newest-voom-ver-by-spec
+"
+  proj dir change -> commit where a change happened in a subtree rooted with a project.clj
+  - mark all project directory changes with project.clj version info
+  - a. narrow proj dir changes by proj name spec
+  - a2. narrow all proj dir changes by *this* proj dir
+  - b. for each branch (matching spec) narrow proj dir changes by branch reachability
+  - c. narrow proj dir changes further by version range (spec)
+  - d. find max sem ver
+  - e. narrow proj dir changes further by max sem ver
+  - f. narrow proj dir changes to candidates by finding proj dir changes
+       with no childer proj dir changes in this set
+"
+  [proj-name {:keys [sha version repo branch path allow-snaps]
+              :or {allow-snaps true sha (l/lvar)}}]
+  (for [gitdir (all-repos-dirs)
+        :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
+        :let [sha (if (string? sha)
+                    (sha/mk sha)
+                    sha)
+              {:keys [shabam pldb]} (updated-git-db gitdir)
+              nupes-a (->>
+                       (q pldb [msha ctime path version has-snaps?]
+                          (l/fresh [bsha]
+                                   (l/== msha sha)
+                                   (r-proj bsha proj-name version has-snaps?)
+                                   (r-proj-path sha path bsha)
+                                   (r-commit-path sha path)
+                                   (r-commit sha ctime _)))
+                       (map #(zipmap [:sha :ctime :path :version :has-snaps?]
+                                     %)))
+              paths (distinct (map :path nupes-a))]
+        found-path paths
+        :when (or (= found-path path) (nil? path))
+        [found-branch branch-sha] (q pldb [ref sha] (r-branch _ ref sha))
+        :when (or (= found-branch branch) (nil? branch))
+        :let [nupes-a2 (filter #(= (:path %) found-path) nupes-a)
+              sha-nupes-a (group-by :sha nupes-a2)
+              shas-b (sha-ancestors shabam branch-sha (map :sha nupes-a2))
+              shas-b (if (contains? sha-nupes-a branch-sha)
+                       (conj shas-b branch-sha)
+                       shas-b)
+              gvs (GenericVersionScheme.)
+              version-constraint (when version
+                                   (.parseVersionConstraint gvs version))
+              nupes-c (if version
+                        (keep #(let [[nupe] (get sha-nupes-a %)]
+                                 (when (.containsVersion
+                                        version-constraint
+                                        (.parseVersion gvs (:version nupe)))
+                                   nupe))
+                              shas-b)
+                        (map (comp first sha-nupes-a) shas-b))
+              [_ max-ver-d] (apply compare-max
+                                   (map #(vector (when % (.parseVersion gvs %)) %)
+                                        (distinct (map :version nupes-c))))
+              nupes-e (filter #(= max-ver-d (:version %)) nupes-c)
+              shas-e (map :sha nupes-e)
+              nupes-f (remove #(seq (sha-successors shabam (:sha %) shas-e)) nupes-e)]
+        {:keys [sha ctime]} nupes-f]
+    {:sha sha
+     :ctime ctime
+     :version max-ver-d
+     :path found-path
+     :proj proj-name
+     :gitdir gitdir
+     :branch found-branch}))
+
 
 ;; ===== point filtering query =====
 
