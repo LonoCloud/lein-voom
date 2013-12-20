@@ -1166,8 +1166,8 @@
                  , (->> (git {:gitdir gitdir}
                              "ls-tree" "-r" "--full-tree" (str sha))
                         :lines
-                        (filter #(re-find #"(^|/)project.clj$" %))
                         (map #(s/split % #"\s+" 4)))
+                   :when (re-find #"(^|/)project.clj$" path)
                    :let [blob-sha (sha/mk bsha)]]
           (->/as pldb
             (pldb/db-fact r-proj-path sha (s/replace path #"(^|/)project.clj$" "") blob-sha)
@@ -1223,7 +1223,7 @@
           (build-shabam (vals new-branches))
           (vary-meta assoc ::dirty true))))))
 
-(def voomdb-header "voom-db-6")
+(def voomdb-header "voom-db-7")
 
 (defn ^File git-db-file
   [gitdir]
