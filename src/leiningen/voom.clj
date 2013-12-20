@@ -966,7 +966,7 @@
 
 (defn ^"[J" bm-set
   [^"[J" bm idx]
-  (let [size (max (count bm) (bm-longs idx))
+  (let [size (max (count bm) (bm-longs (inc idx)))
         nbm (Arrays/copyOf bm ^Long size)
         w (quot idx bits-per-long)
         o (mod idx bits-per-long)
@@ -978,7 +978,7 @@
 
 (defn ^Long bm-get
   [^"[J" bm idx]
-  (when (<= (bm-longs idx) (count bm))
+  (when (<= (bm-longs (inc idx)) (count bm))
     (let [w (quot idx bits-per-long)
           o (mod idx bits-per-long)
           m (bit-set 0 o)
