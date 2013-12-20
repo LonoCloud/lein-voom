@@ -1019,18 +1019,18 @@
       {:sha->idx sha->idx
        :bitmaps bitmaps})))
 
-(defn sha-ancestors [shabam child ancs]
-  (let [{:keys [sha->idx bitmaps]} shabam
-        cidx (sha->idx child)]
-    (filter #(bm-get (get bitmaps cidx)
-                     (sha->idx %))
+(defn sha-ancestors [{:keys [sha->idx bitmaps]} child ancs]
+  (if-let [cidx (sha->idx child)]
+    (filter #(when-let [sha (sha->idx %)]
+               (bm-get (get bitmaps cidx)
+                       sha))
             ancs)))
 
-(defn sha-successors [shabam parent succ]
-  (let [{:keys [sha->idx bitmaps]} shabam
-        pidx (sha->idx parent)]
-    (filter #(bm-get (get bitmaps (sha->idx %))
-                     pidx)
+(defn sha-successors [{:keys [sha->idx bitmaps]} parent succ]
+  (if-let [pidx (sha->idx parent)]
+    (filter #(when-let [sha (sha->idx %)]
+               (bm-get (get bitmaps sha)
+                       pidx))
             succ)))
 
 ;; ===== relation database tables =====
