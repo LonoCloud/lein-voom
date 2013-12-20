@@ -1041,6 +1041,20 @@
 (pldb/db-rel r-commit-path ^:index sha ^:index path)
 (pldb/db-rel r-proj ^:index sha ^:index path ^:index name version has-snaps?)
 
+(defmacro q
+  [db & args]
+  (let [[count [rfresh & body]] (if (-> args first number?)
+                                  ((juxt first rest) args)
+                                  [nil args])
+        run-mode (if count
+                   '[l/run count]
+                   '[l/run*])
+        body (walk/postwalk #(get '{_ (l/lvar)} % %)
+                            body)]
+    `(pldb/with-db ~db
+       (~@run-mode ~rfresh
+                   ~@body))))
+
 (defn sub-paths
   "Turns path 'foo/bar/baz/quux' into:
   ['' 'foo' 'foo/bar' 'foo/bar/baz' 'foo/bar/baz/quux']"
@@ -1223,19 +1237,6 @@
   [_]
   (time (p-repos (fn [p] (updated-git-db p)))))
 
-(defmacro q
-  [db & args]
-  (let [[count [rfresh & body]] (if (-> args first number?)
-                                  ((juxt first rest) args)
-                                  [nil args])
-        run-mode (if count
-                   '[l/run count]
-                   '[l/run*])
-        body (walk/postwalk #(get '{_ (l/lvar)} % %)
-                            body)]
-    `(pldb/with-db ~db
-       (~@run-mode ~rfresh
-                   ~@body))))
 
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
