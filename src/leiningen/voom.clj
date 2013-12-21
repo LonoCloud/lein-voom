@@ -1237,7 +1237,7 @@
                     (sha/mk sha)
                     sha)
               {:keys [shabam pldb]} (updated-git-db gitdir)
-              nupes-a (->>
+              candidates-a (->>
                        (q pldb [msha ctime path version has-snaps?]
                           (l/fresh [bsha]
                                    (l/== msha sha)
@@ -1247,35 +1247,36 @@
                                    (r-commit sha ctime _)))
                        (map #(zipmap [:sha :ctime :path :version :has-snaps?]
                                      %)))
-              paths (distinct (map :path nupes-a))]
+              paths (distinct (map :path candidates-a))]
         found-path paths
         :when (or (= found-path path) (nil? path))
         [found-branch branch-sha] (q pldb [ref sha] (r-branch _ ref sha))
         :when (or (= found-branch branch) (nil? branch))
-        :let [nupes-a2 (filter #(= (:path %) found-path) nupes-a)
-              sha-nupes-a (group-by :sha nupes-a2)
-              shas-b (sha-ancestors shabam branch-sha (map :sha nupes-a2))
-              shas-b (if (contains? sha-nupes-a branch-sha)
+        :let [candidates-a2 (filter #(= (:path %) found-path) candidates-a)
+              sha-candidates-a (group-by :sha candidates-a2)
+              shas-b (sha-ancestors shabam branch-sha (map :sha candidates-a2))
+              shas-b (if (contains? sha-candidates-a branch-sha)
                        (conj shas-b branch-sha)
                        shas-b)
               gvs (GenericVersionScheme.)
               version-constraint (when version
                                    (.parseVersionConstraint gvs version))
-              nupes-c (if version
-                        (keep #(let [[nupe] (get sha-nupes-a %)]
+              candidates-c (if version
+                        (keep #(let [[candidate] (get sha-candidates-a %)]
                                  (when (.containsVersion
                                         version-constraint
-                                        (.parseVersion gvs (:version nupe)))
-                                   nupe))
+                                        (.parseVersion gvs (:version candidate)))
+                                   candidate))
                               shas-b)
-                        (map (comp first sha-nupes-a) shas-b))
+                        (map (comp first sha-candidates-a) shas-b))
               [_ max-ver-d] (apply compare-max
                                    (map #(vector (when % (.parseVersion gvs %)) %)
-                                        (distinct (map :version nupes-c))))
-              nupes-e (filter #(= max-ver-d (:version %)) nupes-c)
-              shas-e (map :sha nupes-e)
-              nupes-f (remove #(seq (sha-successors shabam (:sha %) shas-e)) nupes-e)]
-        {:keys [sha ctime]} nupes-f]
+                                        (distinct (map :version candidates-c))))
+              candidates-e (filter #(= max-ver-d (:version %)) candidates-c)
+              shas-e (map :sha candidates-e)
+              candidates-f (remove #(seq (sha-successors shabam (:sha %) shas-e))
+                                   candidates-e)]
+        {:keys [sha ctime]} candidates-f]
     {:sha sha
      :ctime ctime
      :version max-ver-d
