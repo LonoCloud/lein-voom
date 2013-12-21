@@ -193,6 +193,15 @@ new version that other projects can reliably depend upon.
 - Currently supports only git repos
 
 
+If a project has identical changes on two legs that are then merged,
+the voom version for the project at or after the merge will
+arbitrarily choose the change on one of the legs.  The newest-query
+(freshen and box add) will list both and must not include the merge.
+If the merge commit were included, an attempt to resolve that voom
+version would cause a built at the merge, generating a artifact with a
+sha from one of the legs, and the dependency would remain unresolved.
+
+
 ## License
 
 Distributed under the Eclipse Public License either version 1.0 or (at
