@@ -1221,12 +1221,12 @@
   proj dir change -> commit where a change happened in a subtree rooted with a project.clj
   - mark all project directory changes with project.clj version info
   - a. narrow proj dir changes by proj name spec
-  - a2. narrow all proj dir changes by *this* proj dir
-  - b. for each branch (matching spec) narrow proj dir changes by branch reachability
-  - c. narrow proj dir changes further by version range (spec)
-  - d. find max sem ver
-  - e. narrow proj dir changes further by max sem ver
-  - f. narrow proj dir changes to candidates by finding proj dir changes
+  - b. narrow all proj dir changes by *this* proj dir
+  - c. for each branch (matching spec) narrow proj dir changes by branch reachability
+  - d. narrow proj dir changes further by version range (spec)
+  - e. find max sem ver
+  - f. narrow proj dir changes further by max sem ver
+  - g. narrow proj dir changes to candidates by finding proj dir changes
        with no childer proj dir changes in this set
 "
   [proj-name {:keys [sha version repo branch path allow-snaps]
@@ -1252,34 +1252,34 @@
         :when (or (= found-path path) (nil? path))
         [found-branch branch-sha] (q pldb [ref sha] (r-branch _ ref sha))
         :when (or (= found-branch branch) (nil? branch))
-        :let [candidates-a2 (filter #(= (:path %) found-path) candidates-a)
-              sha-candidates-a (group-by :sha candidates-a2)
-              shas-b (sha-ancestors shabam branch-sha (map :sha candidates-a2))
-              shas-b (if (contains? sha-candidates-a branch-sha)
-                       (conj shas-b branch-sha)
-                       shas-b)
+        :let [candidates-b (filter #(= (:path %) found-path) candidates-a)
+              sha-candidates-a (group-by :sha candidates-b)
+              shas-c (sha-ancestors shabam branch-sha (map :sha candidates-b))
+              shas-c (if (contains? sha-candidates-a branch-sha)
+                       (conj shas-c branch-sha)
+                       shas-c)
               gvs (GenericVersionScheme.)
               version-constraint (when version
                                    (.parseVersionConstraint gvs version))
-              candidates-c (if version
+              candidates-d (if version
                         (keep #(let [[candidate] (get sha-candidates-a %)]
                                  (when (.containsVersion
                                         version-constraint
                                         (.parseVersion gvs (:version candidate)))
                                    candidate))
-                              shas-b)
-                        (map (comp first sha-candidates-a) shas-b))
-              [_ max-ver-d] (apply compare-max
+                              shas-c)
+                        (map (comp first sha-candidates-a) shas-c))
+              [_ max-ver-e] (apply compare-max
                                    (map #(vector (when % (.parseVersion gvs %)) %)
-                                        (distinct (map :version candidates-c))))
-              candidates-e (filter #(= max-ver-d (:version %)) candidates-c)
-              shas-e (map :sha candidates-e)
-              candidates-f (remove #(seq (sha-successors shabam (:sha %) shas-e))
-                                   candidates-e)]
-        {:keys [sha ctime]} candidates-f]
+                                        (distinct (map :version candidates-d))))
+              candidates-f (filter #(= max-ver-e (:version %)) candidates-d)
+              shas-f (map :sha candidates-f)
+              candidates-g (remove #(seq (sha-successors shabam (:sha %) shas-f))
+                                   candidates-f)]
+        {:keys [sha ctime]} candidates-g]
     {:sha sha
      :ctime ctime
-     :version max-ver-d
+     :version max-ver-e
      :path found-path
      :proj proj-name
      :gitdir gitdir
