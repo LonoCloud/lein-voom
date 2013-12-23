@@ -74,3 +74,8 @@
           (read [_ rdr tag component-count]
             (LongSha. (.readInt rdr)))))
       fress/associative-lookup))
+
+(defmethod print-method LongSha [o ^java.io.Writer w]
+  (.write w "#sha/mk \"")
+  (.write w (str o))
+  (.write w "\""))
