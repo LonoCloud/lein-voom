@@ -26,7 +26,10 @@
   The reldata is smaller than the database because it has no indexes."
   [db]
   (for [[rel-name indexes] db]
-    [rel-name (::pldb/unindexed indexes)]))
+    (if-let [min-index (and (< 1 (count indexes))
+                            (apply min (filter number? (keys indexes))))]
+      [rel-name (mapcat seq (vals (get indexes min-index)))]
+      [rel-name (::pldb/unindexed indexes)])))
 
 (defn from-reldata
   "Returns a core.logic pldb for the given reldata (such as generated
