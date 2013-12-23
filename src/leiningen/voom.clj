@@ -279,10 +279,14 @@
   "Build and install given artifact using git. Return value is
   undefined. Throws an exception with detailed message if artifact
   cannot be resolved."
-  [old-exception {:keys [artifactId version] :as art}]
+  [old-exception proj {:keys [groupId artifactId version] :as art}]
 
   (if-let [vmap (ver-parse version)]
-    (let [prjs (find-matching-projects voom-repos (merge vmap art))]
+    (let [dep-entry [(symbol groupId artifactId) version]
+          dep (first (filter #(= dep-entry %) (:dependencies proj)))
+          dep-meta-repo (-> dep meta :voom :repo)
+          _ (when dep-meta-repo (ensure-repo dep-meta-repo))
+          prjs (find-matching-projects voom-repos (merge vmap art))]
       (when (empty? prjs)
         (throw (ex-info (str "No project found for " artifactId " " version
                              " (Hint: might need to clone a new repo into "
@@ -316,7 +320,7 @@
         ;; the real cause of failure we have to dig for it:
         (if-let [arts (seq (missing-artifacts-from-exception e))]
           (doseq [art arts]
-            (resolve-artifact e art))
+            (resolve-artifact e non-dev-proj art))
           (throw e))))))
 
 (defn build-deps
