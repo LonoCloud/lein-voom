@@ -6,6 +6,7 @@
             [clojure.set :as set]
             [clojure.edn :as edn]
             [clojure.data.fressian :as fress]
+            [clojure.data.codec.base64 :as b64]
             [clojure.core.logic.pldb :as pldb]
             [clojure.core.logic :as l]
             [clojure.walk :as walk]
@@ -149,6 +150,14 @@
        (assoc-in m [(keyword remote) (keyword direction)] url)))
    {}
    (:lines (git {:gitdir gitdir} "remote" "-v"))))
+
+(defn ensure-repo
+  "Makes sure the task-dir contains the specified repo, cloning it if not found."
+  [^String repo]
+  (let [repo-dir (->> repo .getBytes ^bytes b64/encode String. (io/file voom-repos))]
+    (if (.exists repo-dir)
+      true
+      (:bool (git {} "clone" repo repo-dir)))))
 
 (defn ancestor?
   [gitdir old new]
