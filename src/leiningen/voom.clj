@@ -275,6 +275,15 @@
 
 ;; === build-deps ===
 
+(defn ensure-deps-repos
+  "Ensures that any repos, mentioned in dependency metadata, are
+   cloned locally."
+  [deps]
+  (doseq [dep deps
+          :let [dep-meta-repo (-> dep meta :voom :repo)]
+          :when dep-meta-repo]
+    (ensure-repo dep-meta-repo)))
+
 (defn resolve-artifact
   "Build and install given artifact using git. Return value is
   undefined. Throws an exception with detailed message if artifact
@@ -584,7 +593,7 @@
   (newline))
 
 (defn fresh-version [[prj ver :as dep]]
-  (let [voom-meta (:voom (meta dep))
+  (let [voom-meta (-> dep meta :voom)
         ver-spec (or (:version voom-meta)
                      (re-find #"^[^.]+." ver))
         groups (->> (newest-voom-ver-by-spec prj (merge voom-meta {:version ver-spec
@@ -637,6 +646,7 @@
 
   Example: lein voom freshen"
   [project]
+  (ensure-deps-repos (:dependencies project))
   (p-repos (fn [p] (fetch-all [p]) (tag-repo-projects p)))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
@@ -760,27 +770,29 @@
       (if (seq rdeps)
         (if (map? fdep)
           (let [[ndep & rdeps] rdeps]
-            (recur (conj deps (with-meta ndep fdep)) rdeps))
+            (recur (conj deps (with-meta ndep {:voom fdep})) rdeps))
           (recur (conj deps fdep) rdeps))
         (conj deps fdep))
       deps)))
 
 (defn box-add
   [proj & adeps]
-  (p-repos (fn [p] (tag-repo-projects p)))
-  (doseq [:let [deps (fold-args-as-meta (map edn/read-string adeps))]
-          dep deps
-          :let [full-projs (if (.contains (str dep) "/")
-                             [dep]
-                             (resolve-short-proj (pr-str dep) (all-projects)))
-                full-projs (map symbol full-projs)
-                repo-infos (mapcat #(newest-voom-ver-by-spec % (meta dep)) full-projs)]]
-    (case (count repo-infos)
-      0 (throw (ex-info "Could not find matching projects" {:dep dep}))
-      1 (box-repo-add (first repo-infos))
-      (do
-        (print "Multiple projects / locations match" (str \" dep \"\:))
-        (print-repo-infos repo-infos)))))
+  (let [deps (fold-args-as-meta (map edn/read-string adeps))]
+    (ensure-deps-repos deps)
+    (p-repos (fn [p] (tag-repo-projects p)))
+    (doseq [dep deps
+            :let [full-projs (if (.contains (str dep) "/")
+                               [dep]
+                               (resolve-short-proj (pr-str dep) (all-projects)))
+                  full-projs (map symbol full-projs)
+                  repo-infos (mapcat #(newest-voom-ver-by-spec % (-> dep meta :voom))
+                                     full-projs)]]
+      (case (count repo-infos)
+        0 (throw (ex-info "Could not find matching projects" {:dep dep}))
+        1 (box-repo-add (first repo-infos))
+        (do
+          (print "Multiple projects / locations match" (str \" dep \"\:))
+          (print-repo-infos repo-infos))))))
 
 (defn box-init
   [proj target & args]
