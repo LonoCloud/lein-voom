@@ -12,6 +12,7 @@
             [clojure.walk :as walk]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
+            [leiningen.help]
             [leiningen.voom.long-sha :as sha :only [mk]]
             [leiningen.voom.pldb :as vdb]
             [leiningen.voom.shabam :refer [shabam-new shabam-contains? shabam-add
@@ -1232,7 +1233,13 @@
      :gitdir gitdir
      :branch found-branch}))
 
-(def subtasks [#'build-deps #'deploy #'find-box #'freshen #'install
+(defn help
+  "Display this help message"
+  ([] nil) ;; Tell lein not to use this fn as help for voom
+  ([project] (leiningen.help/help project "voom"))
+  ([project subtask] (leiningen.help/help project "voom" subtask)))
+
+(def subtasks [#'build-deps #'deploy #'find-box #'freshen #'help #'install
                #'retag-all-repos #'update-repo-dbs #'ver-parse #'wrap])
 
 (def internal-subtasks [#'box #'box-new #'box-init #'box-add #'box-remove])
