@@ -534,8 +534,10 @@
   there so voom can find your deps.
 
   Example: lein voom freshen"
-  [project]
+  [project & args]
   (ensure-deps-repos (:dependencies project))
+  (when (not-any? #{"--no-fetch"} args)
+    (fetch-all (all-repos-dirs)))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
         desired-new-deps (doall (map #(fresh-version %) old-deps))]
