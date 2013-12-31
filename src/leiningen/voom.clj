@@ -353,14 +353,6 @@
     (.containsVersion (.parseVersionConstraint gvs range-str)
                       (.parseVersion gvs version-str))))
 
-(defn fetch-checkout-all
-  "This is slower than necessary for most real use cases."
-  [dirs]
-  (doseq [^File d dirs]
-    (println "Checking out latest:" (.getPath d))
-    (git {:gitdir d} "fetch")
-    (git {:gitdir d} "checkout" "origin/HEAD")))
-
 (defn read-project [gitdir sha prj-path]
   (let [tmp-file (File/createTempFile ".project-" ".clj")
         _ (spit tmp-file
