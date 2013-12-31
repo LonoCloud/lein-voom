@@ -796,16 +796,17 @@
 
 (defn box-init
   [proj target & args]
-  (sh "mkdir" "-p" (adj-path target task-dir))
-  (apply box-add proj args))
+  (let [t (adj-path *pwd* target task-dir)]
+    (sh "mkdir" "-p" t)
+    (binding [*pwd* t]
+      (apply box-add proj args))))
 
 (defn box-new
   [proj target & args]
   (let [p (adj-path *pwd* target)]
     (sh "mkdir" "-p" p)
     (fcmd (str "target_dir='" (.getAbsolutePath p) "'"))
-    (binding [*pwd* p]
-      (apply box-init proj args))))
+    (apply box-init proj target args)))
 
 (defn box-remove
   [proj & args]
