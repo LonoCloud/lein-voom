@@ -25,7 +25,8 @@
   pairs that can be passed to from-reldata to reconstruct a database.
   The reldata is smaller than the database because it has no indexes."
   [db]
-  (for [[rel-name indexes] db]
+  (for [[rel-name indexes] db
+        :when (seq (::pldb/unindexed indexes))]
     (if-let [min-index (and (< 1 (count indexes))
                             (apply min (filter number? (keys indexes))))]
       [rel-name (mapcat seq (vals (get indexes min-index)))]
