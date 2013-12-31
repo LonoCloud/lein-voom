@@ -10,7 +10,7 @@ lein-voom is a Leiningen plugin that helps you clean up your dependency tree.
 
 Use this for user-level plugins:
 
-Put `[voom "0.1.0-SNAPSHOT"]` into the `:plugins` vector of your
+Put `[lein-voom "0.1.0-SNAPSHOT"]` into the `:plugins` vector of your
 `:user` profile, or if you are on Leiningen 1.x do `lein plugin install
 voom 0.1.0-SNAPSHOT`.
 
