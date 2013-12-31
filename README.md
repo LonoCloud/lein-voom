@@ -124,14 +124,15 @@ fetch via git, build, and install locally that dependency.
 
 It does this by maintaining a directory full of git repos that are
 meant to be used only by this plugin. By default these repos are kept
-in `.voom-repos` in the user's home directory. When an artifact
-with a voom-version needs to be built, the sha is found from among the
-voom repos (fetching from the upstream git servers if
-necessary), and that sha is checked out. The plugin then scans the
-`project.clj` files in that git repo to find the one that builds the
-needed dependency, and then runs "lein voom install". Now with
-that dependency resolved, normal lein dep resolution is attempted
-again, repeating as necessary until all dependencies are resolved.
+in `.voom-repos` in the user's home directory. This can be overridden by
+setting the environment variable `VOOM_REPOS`. When an artifact with a
+voom-version needs to be built, the sha is found from among the voom repos
+(fetching from the upstream git servers if necessary), and that sha is
+checked out. The plugin then scans the `project.clj` files in that git repo
+to find the one that builds the needed dependency, and then runs
+"lein voom install". Now with that dependency resolved, normal lein dep
+resolution is attempted again, repeating as necessary until all dependencies
+are resolved.
 
 For now the most common way the process fails is when the required git
 repo isn't currently cloned in `.voom-repos`. Later we may
