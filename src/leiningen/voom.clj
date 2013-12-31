@@ -463,92 +463,6 @@
       xs))
    (lazy-seq (println "done"))))
 
-(defn parse-sha-refs
-  [s]
-  (let [[sha datestr parents refstr] (vec (.split #"," s 4))
-        refs (when refstr
-               (when-let [[_ x] (re-find #"\((.*)\)" refstr)]
-                 (mapv #(s/replace % #"^tag: " "") (.split #",\s+" x))))]
-    {:sha sha, :ctime (Date. ^String datestr), :parents parents, :refs refs}))
-
-(defn project-change-shas
-  [gitdir & opts]
-  (->> (apply git {:gitdir gitdir} "log" "--pretty=format:%H,%cd,%p,%d"
-              "--name-status" "-m" opts)
-       :lines
-       (keep #(if-let [[_ op path] (re-matches #"(.)\t(.*)" %)]
-                (when (re-find #"(^|/)project\.clj$" path)
-                  {:op op :path path})
-                (when (seq %)
-                  (parse-sha-refs %))))
-       (#(concat % [{:sha "end sigil"}]))
-       (reductions (fn [[partial complete] entry]
-                     (if (:sha entry)
-                       [entry partial]
-                       [(update-in partial [:ops] (fnil conj []) entry) nil]))
-                   [nil nil])
-       (keep second)
-       (filter :ops)))
-
-(def repo-tag-version "2")
-
-(defn get-repo-tag-version
-  [gitdir]
-  (-> (git {:gitdir gitdir :ok-statuses #{0 1}}
-           "config" "--local" "voom.tag-version") :out s/trim))
-
-(defn set-repo-tag-version
-  [gitdir ver]
-  (git {:gitdir gitdir :ok-statuses #{0 5}}
-       "config" "--local" "--unset-all" "voom.tag-version")
-  (git {:gitdir gitdir}
-       "config" "--local" "--add" "voom.tag-version" (str ver)))
-
-(defn clear-voom-tags
-  [gitdir]
-  (let [tags (->> (git {:gitdir gitdir} "tag" "--list" "voom-*")
-                  :lines
-                  (remove empty?))]
-    (when (seq tags)
-      (apply git {:gitdir gitdir} "tag" "--delete" tags)
-      nil)))
-
-(defn tag-repo-projects
-  [gitdir]
-  (when (not= repo-tag-version (get-repo-tag-version gitdir))
-    (clear-voom-tags gitdir))
-  (let [branches (origin-branches gitdir)
-        proj-shas (apply project-change-shas gitdir
-                         "--not" "--tags=voom-branch--*"
-                         (map #(str #_double-negative--> "^origin/" %) branches))]
-
-    ;; add missing voom-- tags
-    (doseq [:when (seq proj-shas)
-            {:keys [sha refs parents ops]} (report-progress gitdir proj-shas)
-            {:keys [op path]} ops]
-      (when-let [p (if (= "D" op)
-                     {:root (str (.getParent (io/file path)))}
-                     (robust-read-project gitdir sha path))]
-        (let [snaps (some #(.contains ^String % "-SNAPSHOT")
-                         (map second (:dependencies p)))
-              tag (s/join "--" (-> ["voom"
-                                    (str (:group p)
-                                         (when (:group p) "%")
-                                         (:name p))
-                                    (:version p)
-                                    (s/replace (:root p) #"/" "%")
-                                    (subs sha 0 7)
-                                    (when snaps "snaps")
-                                    (when (empty? parents) "no-parent")]))]
-          (git {:gitdir gitdir} "tag" "-f" tag sha))))
-
-    ;; TODO: clean up abandoned voom-- and voom-branch-- tags
-    ;; Update all voom-branch-- tags
-    (doseq [branch branches]
-      (let [tag (str "voom-branch--" branch)]
-        (git {:gitdir gitdir} "tag" "-f" tag (str "origin/" branch)))))
-  (set-repo-tag-version gitdir repo-tag-version))
-
 (defn p-repos
   "Call f once for each repo dir, in parallel. When all calls are
   done, return nil."
@@ -558,26 +472,6 @@
        doall
        (map deref)
        dorun))
-
-(defn parse-tag
-  [tag]
-  (->
-   (zipmap [:prefix :proj :version :path :sha :snaps :no-parent] (s/split tag #"--"))
-   (update-in [:path] (fnil #(s/replace % #"%" "/") :NOT_FOUND))
-   (update-in [:proj] (fnil #(s/replace % #"%" "/") :NOT_FOUND))))
-
-(defn assert-good-version [ver proj-name version tags found-branch neg-tags commits]
-  (when-not ver
-    (println "Tags matching" proj-name version ":")
-    (doseq [t tags]
-      (prn t))
-    (println "Tag filters to exclude from branch" found-branch ":")
-    (doseq [t neg-tags]
-      (prn t))
-    (println "Commits:")
-    (doseq [c commits]
-      (prn c))
-    (throw (ex-info "Failed to find version for commit." {}))))
 
 (declare newest-voom-ver-by-spec)
 
@@ -648,7 +542,6 @@
   Example: lein voom freshen"
   [project]
   (ensure-deps-repos (:dependencies project))
-  (p-repos (fn [p] (fetch-all [p]) (tag-repo-projects p)))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
         desired-new-deps (doall (map #(fresh-version %) old-deps))]
@@ -781,7 +674,6 @@
   [proj & adeps]
   (let [deps (fold-args-as-meta (map edn/read-string adeps))]
     (ensure-deps-repos deps)
-    (p-repos (fn [p] (tag-repo-projects p)))
     (doseq [dep deps
             :let [full-projs (if (.contains (str dep) "/")
                                [dep]
@@ -886,16 +778,6 @@
   [project & args]
   (apply wrap project "deploy" args))
 
-(defn retag-all-repos
-  "Clear and recreate all voom index tags in $VOOM_REPOS.
-
-  You shouldn't need to use this usually because the index tags are
-  automatically added incrementally and re-generated when tag schemas
-  change.
-
-  Example: lein voom retag-all-repos"
-  [_]
-  (time (p-repos (fn [p] (clear-voom-tags p) (tag-repo-projects p)))))
 
 ;; ===== Git import =====
 
@@ -1248,7 +1130,7 @@
 (def ^{:doc "Display this help message"} box-help help)
 
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'help #'install
-               #'retag-all-repos #'update-repo-dbs #'ver-parse #'wrap
+               #'update-repo-dbs #'ver-parse #'wrap
                #'box #'box-new #'box-init #'box-add #'box-remove #'box-help])
 
 ;; Note the docstring for 'voom' is seen when the user runs any of:
