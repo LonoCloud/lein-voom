@@ -777,6 +777,7 @@
       deps)))
 
 (defn box-add
+  "Add a lein project to this box"
   [proj & adeps]
   (let [deps (fold-args-as-meta (map edn/read-string adeps))]
     (ensure-deps-repos deps)
@@ -796,6 +797,7 @@
           (print-repo-infos repo-infos))))))
 
 (defn box-init
+  "Initilize existing directory as a box and add named lein projects to it"
   [proj target & args]
   (let [t (adj-path *pwd* target task-dir)]
     (sh "mkdir" "-p" t)
@@ -803,6 +805,7 @@
       (apply box-add proj args))))
 
 (defn box-new
+  "Create a new box directory and add named lein projects to it"
   [proj target & args]
   (let [p (adj-path *pwd* target)]
     (sh "mkdir" "-p" p)
@@ -810,6 +813,7 @@
     (apply box-init proj target args)))
 
 (defn box-remove
+  "Remove lein projects from a box"
   [proj & args]
   (doseq [a args
           :let [prjs (resolve-short-proj a (all-boxes))]]
@@ -826,9 +830,11 @@
 
 (declare voom)
 (defn box
+  "Entry point for the box shell alias, not to be used manually."
   [proj & args]
   (let [[^String ver ^String pwd ^String ififo ^String ofifo & rargs] args
-        _ (assert (= "1" ver))
+        _ (assert (= "1" ver)
+                  "Box subtasks must be called using a box alias (version 1)")
         fpwd (File. pwd)
         fofifo (future (-> ofifo FileOutputStream. OutputStreamWriter.))
         fififo (future (-> ififo FileInputStream.))]
@@ -1239,13 +1245,18 @@
   ([project] (leiningen.help/help project "voom"))
   ([project subtask] (leiningen.help/help project "voom" subtask)))
 
+(def ^{:doc "Display this help message"} box-help help)
+
 (def subtasks [#'build-deps #'deploy #'find-box #'freshen #'help #'install
-               #'retag-all-repos #'update-repo-dbs #'ver-parse #'wrap])
+               #'retag-all-repos #'update-repo-dbs #'ver-parse #'wrap
+               #'box #'box-new #'box-init #'box-add #'box-remove #'box-help])
 
-(def internal-subtasks [#'box #'box-new #'box-init #'box-add #'box-remove])
-
+;; Note the docstring for 'voom' is seen when the user runs any of:
+;; $ lein help voom
+;; $ lein voom help
+;; $ box help
 (defn ^:no-project-needed ^{:subtasks subtasks} voom
-  "Generate and use artifacts versioned with git commit and commit time.
+  "lein voom: Generate and use artifacts versioned with git commit and commit time.
 
   There are several subtasks, as well as the 'box' script which has
   several commands of its own, built using this plugin."
@@ -1253,7 +1264,7 @@
 
   (let [subtask-var (resolve (symbol "leiningen.voom"
                                      (s/replace subtask-name #"^:" "")))]
-    (if-let [subtask (some #{subtask-var} (concat subtasks internal-subtasks))]
+    (if-let [subtask (some #{subtask-var} subtasks)]
       (if (:info-subtask (meta subtask))
         (prn (apply subtask args))
         (apply subtask project args))
