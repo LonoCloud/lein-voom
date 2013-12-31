@@ -102,7 +102,8 @@
     (assert ctime (str "format-voom-ver requires :ctime " (pr-str gver)))
     (assert sha   (str "format-voom-ver requires :sha " (pr-str gver)))
     (str (s/replace version #"-SNAPSHOT" "")
-         "-" (formatted-timestamp timestamp-fmt ctime) "-g" sha)))
+         "-" (formatted-timestamp timestamp-fmt ctime)
+         "-g" (re-find #"^.{4,7}" (str sha)))))
 
 (defn update-proj-version
   [project long-sha?]
@@ -480,22 +481,23 @@
   (newline))
 
 (defn fresh-version [[prj ver :as dep]]
-  (let [voom-meta (-> dep meta :voom)
-        ver-spec (or (:version voom-meta)
-                     (re-find #"^[^.]+." ver))
-        groups (->> (newest-voom-ver-by-spec prj (merge voom-meta {:version ver-spec
-                                                                   :allow-snaps false}))
-                    (map #(assoc % :voom-ver (format-voom-ver
-                                              (update-in % [:sha] subs 0 7))))
-                    (group-by :voom-ver))]
-    (case (count groups)
-     0 (do (println "No matching version found for" prj (pr-str ver-spec))
-           dep)
-     1 (assoc dep 1 (key (first groups)))
-     (do (print "\nMultiple bump resolutions for:"
-                prj (pr-str ver-spec) (pr-str voom-meta))
-         (print-repo-infos (map #(first (val %)) groups))
-         dep))))
+  (if-let [voom-meta (-> dep meta :voom)]
+    (let [voom-meta (merge {:allow-snaps false, :freshen true} voom-meta)]
+      (if (not (:freshen voom-meta))
+        dep
+        (let [groups (->> (newest-voom-ver-by-spec prj voom-meta)
+                          (map #(assoc % :voom-ver (format-voom-ver %)))
+                          (group-by :voom-ver))]
+          (case (count groups)
+            0 (do (println "No matching version found for:" prj
+                           (pr-str voom-meta))
+                  dep)
+            1 (assoc dep 1 (key (first groups)))
+            (do (print "\nMultiple bump resolutions for:"
+                       prj (pr-str voom-meta))
+                (print-repo-infos (map #(first (val %)) groups))
+                dep)))))
+    dep))
 
 (defn rewrite-project-file [input-str replacement-map]
   (reduce (fn [^String text [[prj old-ver :as old-dep] [_ new-ver]]]
