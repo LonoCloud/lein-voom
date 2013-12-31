@@ -1061,7 +1061,7 @@
   - g. narrow proj dir changes to candidates by finding proj dir changes
        with no childer proj dir changes in this set
 "
-  [proj-name {:keys [sha version repo branch path allow-snaps]
+  [proj-name {:keys [sha version-mvn repo branch path allow-snaps]
               :or {allow-snaps true sha (l/lvar)}}]
   (for [gitdir (all-repos-dirs)
         :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
@@ -1091,16 +1091,16 @@
                        (conj shas-c branch-sha)
                        shas-c)
               gvs (GenericVersionScheme.)
-              version-constraint (when version
-                                   (.parseVersionConstraint gvs version))
-              candidates-d (if version
-                        (keep #(let [[candidate] (get sha-candidates-a %)]
-                                 (when (.containsVersion
-                                        version-constraint
-                                        (.parseVersion gvs (:version candidate)))
-                                   candidate))
-                              shas-c)
-                        (map (comp first sha-candidates-a) shas-c))
+              version-constraint (when version-mvn
+                                   (.parseVersionConstraint gvs version-mvn))
+              candidates-d (if version-mvn
+                             (keep #(let [[candidate] (get sha-candidates-a %)]
+                                      (when (.containsVersion
+                                             version-constraint
+                                             (.parseVersion gvs (:version candidate)))
+                                        candidate))
+                                   shas-c)
+                             (map (comp first sha-candidates-a) shas-c))
               [_ max-ver-e] (apply compare-max
                                    (map #(vector (when % (.parseVersion gvs %)) %)
                                         (distinct (map :version candidates-d))))
