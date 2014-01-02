@@ -409,8 +409,7 @@
                  ["--symbolic-full-name"])
                ["--remotes=origin/"]))
        :lines
-       (map #(re-find #"[^/]+$" %))
-       distinct))
+       (map #(re-find #"[^/]+$" %))))
 
 (defn new-throttle
   ([msg-fn] (new-throttle 500 msg-fn (constantly false)))
