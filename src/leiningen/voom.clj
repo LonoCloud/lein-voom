@@ -696,6 +696,8 @@
           (print (str " " p)))
         (println)))))
 
+(def fifo-timeout 1000 #_milliseconds)
+
 (declare voom)
 (defn box
   "Entry point for the box shell alias, not to be used manually."
@@ -707,11 +709,13 @@
         fofifo (future (-> ofifo FileOutputStream. OutputStreamWriter.))
         fififo (future (-> ififo FileInputStream.))]
     (binding [*pwd* fpwd
-              *ofifo* @fofifo
-              *ififo* @fififo]
-      (.read *ififo* (byte-array 5))
+              *ofifo* (deref fofifo fifo-timeout nil)
+              *ififo* (deref fififo fifo-timeout nil)]
+      (if (and *ofifo* *ififo*)
+        (.read *ififo* (byte-array 5))
+        (println "INFO: fifo failed -- no env changes will be attempted."))
       (apply voom proj rargs)
-      ;; TODO formalize break/exit handling
+      ;; TODO formalizE break/exit handling
       (fcmd "break"))))
 
 ;; === lein entrypoint ===
