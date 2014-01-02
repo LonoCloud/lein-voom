@@ -427,7 +427,7 @@
 
 (defn new-throttle
   ([msg-fn] (new-throttle 500 msg-fn (constantly false)))
-  ([ms msg-fn] (new-throttle 500 msg-fn (constantly false)))
+  ([msg-fn report-pred] (new-throttle 500 msg-fn report-pred))
   ([ms msg-fn report-pred]
      {:last-report (atom 0)
       :ms ms ;; reporting rate in milliseconds
