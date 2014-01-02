@@ -465,18 +465,17 @@
        (map (fn [info]
               (-> info
                   (dissoc :gitdir)
-                  (assoc :repo (-> (remotes (:gitdir info)) :origin :fetch))
                   (update-in [:sha] #(subs (str % "--------") 0 7)))))
        (sort-by :ctime)
        (print-table [:repo :path :proj :version :branch :ctime :sha]))
   (newline))
 
-(defn fresh-version [[prj ver :as dep]]
+(defn fresh-version [repo-dbs [prj ver :as dep]]
   (if-let [voom-meta (-> dep meta :voom)]
     (let [voom-meta (merge {:allow-snaps false, :freshen true} voom-meta)]
       (if (not (:freshen voom-meta))
         dep
-        (let [groups (->> (newest-voom-ver-by-spec prj voom-meta)
+        (let [groups (->> (newest-voom-ver-by-spec repo-dbs prj voom-meta)
                           (map #(assoc % :voom-ver (format-voom-ver %)))
                           (group-by :voom-ver))]
           (case (count groups)
@@ -507,6 +506,7 @@
           input-str
           replacement-map))
 
+(declare all-repo-dbs)
 (defn freshen
   "Modify dependency versions in this project.clj based on what's available in $VOOM_REPOS
 
@@ -531,7 +531,8 @@
     (fetch-all))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
-        desired-new-deps (doall (map #(fresh-version %) old-deps))]
+        repo-dbs (all-repo-dbs)
+        desired-new-deps (doall (map #(fresh-version repo-dbs %) old-deps))]
     (doseq [[[prj old-ver] [_ new-ver]] (map list old-deps desired-new-deps)]
       (println (format "%-40s" prj)
                (str old-ver
@@ -612,21 +613,20 @@
               (sh "rm" "-rf" checkout))))
 
 (defn box-repo-add
-  [{:keys [gitdir branch sha proj path]}]
+  [{:keys [repo gitdir branch sha proj path]}]
   (if-let [bdir (find-box)]
     (let [sha (str sha)
           pname (-> (str proj)
                     (s/replace #"/" "--"))
           pdir (adj-path bdir pname)
           checkout (adj-path bdir task-dir pname)
-          g {:gitdir checkout}
-          remote (-> (remotes gitdir) :origin :fetch)]
+          g {:gitdir checkout}]
       (when (and (.exists ^File checkout)
-                 (not= remote (-> (remotes (:gitdir g)) :origin :fetch)))
+                 (not= repo (-> (remotes (:gitdir g)) :origin :fetch)))
         (safe-delete-repo checkout pdir))
       (if (.exists ^File checkout)
         (git g "fetch")
-        (git {} "clone" remote "--refer" gitdir checkout))
+        (git {} "clone" repo "--refer" gitdir checkout))
       (git g "checkout" sha) ; must detach head for update...
       (git g "branch" "-f" branch sha)
       (git g "checkout" branch)
@@ -651,10 +651,11 @@
 (defn box-add
   "Add a lein project to this box"
   [proj & adeps]
-  (let [deps (fold-args-as-meta (map edn/read-string adeps))]
+  (let [repo-dbs (all-repo-dbs)
+        deps (fold-args-as-meta (map edn/read-string adeps))]
     (ensure-deps-repos deps)
     (doseq [dep deps
-            :let [repo-infos (newest-voom-ver-by-spec dep (-> dep meta :voom))]]
+            :let [repo-infos (newest-voom-ver-by-spec repo-dbs dep (-> dep meta :voom))]]
       (println "box adding" (str (-> dep meta :voom)) dep)
       (case (count repo-infos)
         0 (throw (ex-info "Could not find matching projects" {:dep dep}))
@@ -1019,7 +1020,7 @@
                (add-git-facts gitdir))]
     (when (::dirty (meta db))
       (write-git-db db gitdir))
-    db))
+    (assoc db :gitdir gitdir)))
 
 (defn update-repo-dbs
   "Update voom dbs for all git repos in $VOOM_REPOS.
@@ -1027,6 +1028,13 @@
   Example: lein voom update-repo-dbs"
   [_]
   (time (p-repos (fn [p] (updated-git-db p)))))
+
+(defn all-repo-dbs
+  []
+  (into {}
+        (for [dir (all-repos-dirs)]
+          [(-> ^File dir .getName (.getBytes "UTF-8") ^bytes b64/decode (String. "UTF-8"))
+           (delay (updated-git-db dir))])))
 
 ;; ===== latest version querying =====
 
@@ -1047,14 +1055,14 @@
   - g. narrow proj dir changes to candidates by finding proj dir changes
        with no childer proj dir changes in this set
 "
-  [name-spec {:keys [sha version-mvn repo branch path allow-snaps]
-              :or {allow-snaps true, sha (l/lvar)}}]
-  (for [gitdir (all-repos-dirs)
-        :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
+  [repo-dbs name-spec {:keys [sha version-mvn repo branch path allow-snaps]
+                       :or {allow-snaps true, sha (l/lvar)}}]
+  (for [found-repo (keys repo-dbs)
+        :when (or (nil? repo) (= repo found-repo))
         :let [sha (if (string? sha)
                     (sha/mk sha)
                     sha)
-              {:keys [shabam pldb]} (updated-git-db gitdir)
+              {:keys [shabam pldb gitdir]} (deref (get repo-dbs found-repo))
               proj-names (if (.contains (str name-spec) "/")
                            [name-spec]
                            (map symbol
@@ -1111,6 +1119,7 @@
      :path found-path
      :proj proj-name
      :gitdir gitdir
+     :repo found-repo
      :branch found-branch}))
 
 (defn help
