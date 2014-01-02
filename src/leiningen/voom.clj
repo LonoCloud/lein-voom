@@ -219,12 +219,16 @@
 (defn all-repos-dirs []
   (glob (str (s/replace voom-repos #"/$" "") "/*")))
 
-(defn fetch-all
-  [dirs]
-  (doseq [^File d dirs]
-    (print (str "Fetching: " (.getPath d) "\n"))
-    (flush)
-    (git {:gitdir d} "fetch")))
+(defn ^:info-subtask fetch-all
+  "Run 'git fetch' for all git repos in $VOOM_REPOS"
+  ([]
+     (fetch-all (all-repos-dirs))
+     'done)
+  ([dirs]
+     (doseq [^File d dirs]
+       (let [repo (-> (remotes d) :origin :fetch)]
+         (println "Fetching:" repo (print-str (list (.getName d))))
+         (git {:gitdir d} "fetch")))))
 
 (defn find-project
   [pgroup pname candidate]
@@ -537,7 +541,7 @@
   [project & args]
   (ensure-deps-repos (:dependencies project))
   (when (not-any? #{"--no-fetch"} args)
-    (fetch-all (all-repos-dirs)))
+    (fetch-all))
   (let [prj-file-name (str (:root project) "/project.clj")
         old-deps (:dependencies project)
         desired-new-deps (doall (map #(fresh-version %) old-deps))]
@@ -1125,8 +1129,8 @@
 
 (def ^{:doc "Display this help message"} box-help help)
 
-(def subtasks [#'build-deps #'deploy #'find-box #'freshen #'help #'install
-               #'update-repo-dbs #'ver-parse #'wrap
+(def subtasks [#'build-deps #'deploy #'fetch-all #'find-box #'freshen #'help
+               #'install #'update-repo-dbs #'ver-parse #'wrap
                #'box #'box-new #'box-init #'box-add #'box-remove #'box-help])
 
 ;; Note the docstring for 'voom' is seen when the user runs any of:
