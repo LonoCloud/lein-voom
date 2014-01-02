@@ -393,7 +393,8 @@
       (try
         (spit tmp-file
               (:out (git {:gitdir gitdir} "cat-file" "-p" (str blob-sha))))
-        (project/read (str tmp-file))
+        (binding [*out* null-writer, *err* null-writer]
+          (project/read (str tmp-file)))
         (catch Exception e
           ;; It was really just a best effort anyway. Silently ignore.
           nil)
