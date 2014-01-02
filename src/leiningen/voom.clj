@@ -569,14 +569,6 @@
                            :desired-new-deps desired-new-deps
                            :tmp-file-name (str tmp-file)})))))))
 
-(defn all-projects
-  []
-  (into #{}
-        (flatten
-         (for [g (all-repos-dirs)]
-           (map #(s/replace (second (s/split % #"--")) #"%" "/")
-                (:lines (git {:gitdir g} "tag" "--list" "voom--*")))))))
-
 (defn resolve-short-proj
   [dep projects]
   (for [proj projects
@@ -675,12 +667,8 @@
   (let [deps (fold-args-as-meta (map edn/read-string adeps))]
     (ensure-deps-repos deps)
     (doseq [dep deps
-            :let [full-projs (if (.contains (str dep) "/")
-                               [dep]
-                               (resolve-short-proj (pr-str dep) (all-projects)))
-                  full-projs (map symbol full-projs)
-                  repo-infos (mapcat #(newest-voom-ver-by-spec % (-> dep meta :voom))
-                                     full-projs)]]
+            :let [repo-infos (newest-voom-ver-by-spec dep (-> dep meta :voom))]]
+      (println "box adding" (str (-> dep meta :voom)) dep)
       (case (count repo-infos)
         0 (throw (ex-info "Could not find matching projects" {:dep dep}))
         1 (box-repo-add (first repo-infos))
@@ -1065,15 +1053,25 @@
   - g. narrow proj dir changes to candidates by finding proj dir changes
        with no childer proj dir changes in this set
 "
-  [proj-name {:keys [sha version-mvn repo branch path allow-snaps]
-              :or {allow-snaps true sha (l/lvar)}}]
+  [name-spec {:keys [sha version-mvn repo branch path allow-snaps]
+              :or {allow-snaps true, sha (l/lvar)}}]
   (for [gitdir (all-repos-dirs)
         :when (or (nil? repo) (= repo (-> (remotes gitdir) :origin :fetch)))
         :let [sha (if (string? sha)
                     (sha/mk sha)
                     sha)
               {:keys [shabam pldb]} (updated-git-db gitdir)
-              candidates-a (->>
+              proj-names (if (.contains (str name-spec) "/")
+                           [name-spec]
+                           (map symbol
+                                (resolve-short-proj
+                                 (str name-spec)
+                                 (map str
+                                      (distinct
+                                       (q pldb [proj-name]
+                                          (r-proj _ proj-name _ _)))))))]
+        proj-name proj-names
+        :let [candidates-a (->>
                        (q pldb [msha ctime path version has-snaps?]
                           (l/fresh [bsha]
                                    (l/== msha sha)
