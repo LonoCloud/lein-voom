@@ -865,12 +865,17 @@
                                 (-> commit
                                     (assoc :merge true)
                                     (assoc :paths (merged-paths gitdir (-> commit :sha str))))
-                                commit))]
+                                commit))
+            t (new-throttle
+               (fn [i]
+                 (printf (str "\rCollecting commits %d ...") i)
+                 (flush)))]
         (with-open [rdr (-> out
                             java.io.ByteArrayInputStream.
                             (java.io.InputStreamReader. "ISO-8859-1")
                             java.io.BufferedReader.)]
           (loop [commits [], commit {}]
+            (throttled t (count commits))
             (if-let [line (.readLine rdr)]
               (if (empty? line)
                 (recur (conj commits commit) {})
@@ -971,8 +976,10 @@
             (update-in [:pldb] pldb/db-fact r-branch repo name sha))
 
           ;; Add commits
-          (->/for [commit (exported-commits
-                           gitdir (vals new-branches) (vals old-branches))]
+          (->/for [commit (report-progress
+                           (str "Indexing " repo " commits")
+                           (exported-commits
+                            gitdir (vals new-branches) (vals old-branches)))]
             (->/assoc :pldb (add-commit-facts gitdir commit)))
 
           (build-shabam (vals new-branches))
