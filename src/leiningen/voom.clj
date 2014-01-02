@@ -433,7 +433,9 @@
   [msg xs]
   (concat
    (let [c (count xs)
-         digits (inc (long (quot (Math/log c) (Math/log 10))))
+         digits (inc (long (if (zero? c)
+                             1
+                             (quot (Math/log c) (Math/log 10)))))
          t (new-throttle
             (fn [i]
               (printf (str "\r%s %" digits "d/%d ...") msg (inc i) c)
