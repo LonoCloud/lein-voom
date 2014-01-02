@@ -384,20 +384,6 @@
 ;; Shhh...
 (.setDynamic #'slurp)
 (.setDynamic #'load-file)
-(defn robust-read-project
-  [gitdir sha prj-path]
-  (try
-    ;; Hack to work around our crazy project.clj files
-    (binding [slurp (patch-fn slurp "{}")
-              load-file (patch-fn load-file {})]
-      (read-project gitdir sha prj-path))
-    (catch Exception e
-      ;; 128 means git complained about
-      ;; something. Probably a non-existant
-      ;; project.clj at this sha.
-      (when-not (= 128 (:exit (ex-data e)))
-        (println "Ignoring error:" (pr-str e)))
-      nil)))
 (defn robust-read-proj-blob
   [gitdir blob-sha]
   ;; Hack to work around crazy project.clj files
