@@ -461,6 +461,8 @@
 
 (declare newest-voom-ver-by-spec)
 
+(def verify-newest? true)
+
 (defn print-repo-infos
   [repo-infos]
   (->> repo-infos
@@ -469,7 +471,9 @@
                   (dissoc :gitdir)
                   (update-in [:sha] #(subs (str % "--------") 0 7)))))
        (sort-by :ctime)
-       (print-table [:repo :path :proj :version :branch :ctime :sha]))
+       (print-table (-> [:repo :path :proj :version :branch :ctime :sha]
+                        (->/when verify-newest?
+                          (conj :verify)))))
   (newline))
 
 (defn fresh-version [repo-dbs [prj ver :as dep]]
@@ -477,14 +481,17 @@
     (let [voom-meta (merge {:allow-snaps false, :freshen true} voom-meta)]
       (if (not (:freshen voom-meta))
         dep
-        (let [groups (->> (newest-voom-ver-by-spec repo-dbs prj voom-meta)
+        (let [infos (newest-voom-ver-by-spec repo-dbs prj voom-meta)
+              groups (->> infos
                           (map #(assoc % :voom-ver (format-voom-ver %)))
                           (group-by :voom-ver))]
           (case (count groups)
             0 (do (println "No matching version found for:" prj
                            (pr-str voom-meta))
                   dep)
-            1 (assoc dep 1 (key (first groups)))
+            1 (do
+                (assert (contains? #{nil :ok} (:verify (first infos))))
+                (assoc dep 1 (first infos)))
             (do (print "\nMultiple bump resolutions for:"
                        prj (pr-str voom-meta))
                 (print-repo-infos (map #(first (val %)) groups))
@@ -615,7 +622,8 @@
               (sh "rm" "-rf" checkout))))
 
 (defn box-repo-add
-  [{:keys [repo gitdir branch sha proj path]}]
+  [{:keys [repo gitdir branch sha proj path verify]}]
+  (assert (contains? #{nil :ok} verify))
   (if-let [bdir (find-box)]
     (let [sha (str sha)
           pname (-> (str proj)
@@ -1119,7 +1127,13 @@
               candidates-g (remove #(seq (sha-successors shabam (:sha %) shas-f))
                                    candidates-f)]
         {:keys [sha ctime]} candidates-g]
-    {:sha sha
+    {:verify (when verify-newest?
+               (git {:gitdir gitdir} "checkout" (str sha))
+               (let [check-sha (sha/mk (:sha (get-voom-version found-path :gitdir gitdir)))]
+                 (if (= check-sha sha)
+                   :ok
+                   check-sha)))
+     :sha sha
      :ctime ctime
      :version max-ver-e
      :path found-path
