@@ -90,6 +90,7 @@
   [path & {:keys [long-sha? gitdir]}]
   (let [shafmt (if long-sha? "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
+        path (get {"" "."} path path)
         {:keys [out]} (git {:gitdir gitdir} "log" "-1" fmt path)
         [sha, datestr] (-> out s/trim (s/split #"," 2))
         ctime (Date. ^String datestr)]
