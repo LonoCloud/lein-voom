@@ -40,6 +40,7 @@
 
 (defn sh
   [& cmdline]
+  ;; (prn :sh cmdline)
   (apply shell/sh (map #(if (= File (class %))
                           (.getPath ^File %)
                           %)
@@ -233,7 +234,6 @@
 
 (defn find-project
   [pgroup pname candidate]
-  (prn "find-project" pgroup pname candidate)
   (for [p (find-project-files candidate)
         :let [{:keys [group name] :as prj} (project/read p)]
         :when (and (= group pgroup)
@@ -243,7 +243,6 @@
 (defn find-matching-projects
   "[project {groupId name ctime sha}] [project coordinate-string]"
   [repos-dir pspec]
-  (prn "find-matching-projects" repos-dir pspec)
   ;; TODO: find correct sha and project.clj more efficiently and with
   ;; less ambiguity. (only consider projects changed at the given sha)
   (let [{:keys [sha artifactId groupId]} pspec
@@ -252,7 +251,6 @@
         sha-candidates (or sha-candidates
                            (do (fetch-all dirs)
                                (locate-sha dirs sha)))]
-    (prn "sha-candidates" sha-candidates)
     (mapcat (fn [c]
               (git {:gitdir c} "checkout" sha)
               (find-project groupId artifactId c))
@@ -296,6 +294,7 @@
   undefined. Throws an exception with detailed message if artifact
   cannot be resolved."
   [old-exception proj {:keys [groupId artifactId version] :as art}]
+  (println "Did not find, will build" (pr-str) art)
 
   (if-let [vmap (ver-parse version)]
     (let [dep-entry [(symbol groupId artifactId) version]
@@ -342,6 +341,7 @@
 (defn build-deps
   "Like 'lein deps', but also builds voom-versioned things as needed."
   [project & args]
+  (println "-- build-deps for" (:name project))
   (try
     (loop []
       (when-not (= :ok (try-once-resolve-voom-version project))
