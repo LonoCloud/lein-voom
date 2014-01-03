@@ -851,17 +851,27 @@
 
 (defn exported-commits
   [gitdir tip-shas seen-shas]
-  (let [marks-file (File/createTempFile "marks" ".txt")]
+  (let [long-sha (fn [sha] (first (:lines (git {:gitdir gitdir} "rev-parse" (str sha)))))
+        out-marks-file (File/createTempFile "out-marks" ".txt")
+        in-marks-file (File/createTempFile "in-marks" ".txt")]
     (try
-      (let [{:keys [out]} (apply sh "git" "fast-export" "--no-data"
-                                 (str "--export-marks=" marks-file)
-                                 (concat (map str tip-shas)
-                                         (map #(str "^" %) seen-shas)
-                                         [:dir gitdir, :out-enc :bytes]))
+      (spit in-marks-file
+            (apply str (map-indexed (fn [i sha]
+                                      (str ":" (inc i) " " (long-sha sha) "\n"))
+                                    seen-shas)))
+      (let [{:keys [out] :as rtn} (apply sh "git" "fast-export" "--no-data"
+                                         (str "--export-marks=" out-marks-file)
+                                         (concat
+                                          (when (seq seen-shas)
+                                            [(str "--import-marks=" in-marks-file)])
+                                          (map str tip-shas)
+                                          (map #(str "^" %) seen-shas)
+                                          [:dir gitdir, :out-enc :bytes]))
+            _ (assert (zero? (:exit rtn)) (pr-str (:err rtn)))
             marks (into {}
                         (map #(let [[mark sha] (s/split % #" ")]
                                 [mark (sha/mk sha)])
-                             (re-seq #"(?m)^.*$" (slurp marks-file))))
+                             (re-seq #"(?m)^.*$" (slurp out-marks-file))))
             merge-commit-fn (fn [cmd commit]
                               (if (= cmd "merge")
                                 (-> commit
@@ -906,7 +916,8 @@
                                commit)))))
               commits))))
       (finally
-       (.delete marks-file)))))
+       (.delete in-marks-file)
+       (.delete out-marks-file)))))
 
 (defn proj-fact-tail
   [gitdir blob-sha]
@@ -987,7 +998,7 @@
           (build-shabam (vals new-branches))
           (vary-meta assoc ::dirty true))))))
 
-(def voomdb-header "voom-db-7")
+(def voomdb-header "voom-db-8")
 
 (defn ^File git-db-file
   [gitdir]
