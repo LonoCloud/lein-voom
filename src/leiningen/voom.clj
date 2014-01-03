@@ -491,7 +491,7 @@
                   dep)
             1 (do
                 (assert (contains? #{nil :ok} (:verify (first infos))))
-                (assoc dep 1 (first infos)))
+                (assoc dep 1 (key (first groups))))
             (do (print "\nMultiple bump resolutions for:"
                        prj (pr-str voom-meta))
                 (print-repo-infos (map #(first (val %)) groups))
