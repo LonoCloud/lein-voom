@@ -749,14 +749,17 @@
   [project & args]
   (let [[kw-like more-args] (split-with #(re-find #"^:" %) args)
         kargset (set (map edn/read-string kw-like))
-        new-project (update-proj-version project (:long-sha kargset))]
+        new-project (update-proj-version project (:long-sha kargset))
+        dirty? (dirty-wc? (:root project))]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
     ;;    :no-upstream - by default voom wants to see the current
     ;;      version reachable via an upstream repo
-    (if (and (dirty-wc? (:root new-project))
-             (not (:insanely-allow-dirty-working-copy kargset)))
+    (if (and dirty? (not (:insanely-allow-dirty-working-copy kargset)))
       (lmain/abort "Refusing to continue with dirty working copy. (Hint: Run 'git status')")
-      (lmain/resolve-and-apply new-project more-args))))
+      (do
+        (when dirty?
+          (println "WARNING: Using dirty working copy!"))
+        (lmain/resolve-and-apply new-project more-args)))))
 
 (defn install
   "Same as 'lein voom wrap install': install a voom-versioned artifact of this project.
