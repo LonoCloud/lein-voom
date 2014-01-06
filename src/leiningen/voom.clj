@@ -240,6 +240,10 @@
                    (= name pname))]
     prj))
 
+(defn safe-checkout [gitdir sha]
+  (git {:gitdir gitdir} "clean" "-x" "-d" "--force" "--quiet")
+  (git {:gitdir gitdir} "checkout" sha))
+
 (defn find-matching-projects
   "[project {groupId name ctime sha}] [project coordinate-string]"
   [repos-dir pspec]
@@ -252,7 +256,7 @@
                            (do (fetch-all dirs)
                                (locate-sha dirs sha)))]
     (mapcat (fn [c]
-              (git {:gitdir c} "checkout" sha)
+              (safe-checkout c sha)
               (find-project groupId artifactId c))
             sha-candidates)))
 
@@ -637,7 +641,7 @@
       (if (.exists ^File checkout)
         (git g "fetch")
         (git {} "clone" repo "--refer" gitdir checkout))
-      (git g "checkout" sha) ; must detach head for update...
+      (safe-checkout checkout sha) ; must detach head for update...
       (git g "branch" "-f" branch sha)
       (git g "checkout" branch)
       (sh "rm" "-f" pdir)
@@ -1139,7 +1143,7 @@
                                    candidates-f)]
         {:keys [sha ctime]} candidates-g]
     {:verify (when verify-newest?
-               (git {:gitdir gitdir} "checkout" (str sha))
+               (safe-checkout gitdir (str sha))
                (let [check-sha (sha/mk (:sha (get-voom-version found-path :gitdir gitdir)))]
                  (if (= check-sha sha)
                    :ok
