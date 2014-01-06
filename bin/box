@@ -27,9 +27,9 @@ function run_box_job {
     \mkfifo -m 600 "$ofifo"
 
     local d="$target_dir"
-    while [[ "/" != $(readlink -f $d) ]]; do
+    while [[ "/" != $(\cd -P $d && \pwd) ]]; do
         if [[ -d "$d/.voom-box" ]]; then
-           \cd $(readlink -f $d)
+           \cd $(\cd -P $d && \pwd)
            break
         fi
         d="$d/.."
