@@ -264,7 +264,11 @@
   [proot]
   (println "Calling recursive build-deps on:" proot)
   (print (:out (sh "lein" "voom" "build-deps" :dir proot)))
-  (let [install-cmd ["lein" "voom" "wrap" "install" :dir proot]
+  ;; BEWARE: Allowing dirty working copy here is ONLY OK because the
+  ;; working copy in question was just checked out and cleaned using
+  ;; 'safe-checkout in 'find-matching-projects above:
+  (let [install-cmd ["lein" "voom" "wrap" ":insanely-allow-dirty-working-copy"
+                     "install" :dir proot]
         _ (apply println "install-versioned-artifact:" install-cmd)
         rtn (apply sh install-cmd)]
     (when-not (zero? (:exit rtn))
