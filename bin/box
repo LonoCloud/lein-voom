@@ -18,13 +18,9 @@
 # like to. (It will call the calling context to exit.)
 
 function run_box_job {
-    local tdir=$(mktemp -d)
-    local ififo="${tdir}/voom-box-fifo-in"
-    local ofifo="${tdir}/voom-box-fifo-out"
+    local tfile=$(mktemp -t voom-box)
     local target_dir="$PWD"
     local cmd="$1"; shift
-    \mkfifo -m 600 "$ififo"
-    \mkfifo -m 600 "$ofifo"
 
     local d="$target_dir"
     while [[ "/" != $(\cd -P $d && \pwd) ]]; do
@@ -35,25 +31,15 @@ function run_box_job {
         d="$d/.."
     done
 
-    local cli_version=1
-    \lein voom :box "$cli_version" "$target_dir" "$ofifo" "$ififo" ":box-${cmd}" "$@" &
-
-    local x=""
-    echo "X" > "$ofifo" # prime the pump
-    while read x; do
-        eval "$x"
-        echo "$?" > "$ofifo"
-    done < "$ififo"
-    echo "0" > "$ofifo"
+    local cli_version=2
+    \lein voom :box "$cli_version" "$target_dir" "$tfile" ":box-${cmd}" "$@"
 
     # Return to our target location, as much as it still exists.
     local d="$target_dir"
     while ! [[ -d "$d" ]]; do d=$(dirname "$d"); done
     \cd "$d"
 
-    \rm "$ififo" "$ofifo"
-    \rmdir "$tdir"
-    \fg %- >/dev/null # silences job control output
+    \rm "$tfile"
 }
 
 # TODO: signal/exit handler to kill background process

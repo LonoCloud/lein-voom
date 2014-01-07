@@ -32,10 +32,9 @@
 (set! *warn-on-reflection* true)
 
 
-;;=== FIFO and shell functions ===
+;;=== shell functions ===
 
-(def ^:dynamic ^FileInputStream *ififo* nil)
-(def ^:dynamic ^OutputStreamWriter *ofifo* nil)
+(def ^:dynamic *box-cmds* (atom []))
 (def ^:dynamic ^File *pwd* nil)
 
 (defn sh
@@ -46,18 +45,9 @@
                           %)
                        cmdline)))
 
-(defn fcmd
+(defn box-cmd
   [cmd]
-  (if (and *ififo* *ofifo*)
-    (do
-      (binding [*out* *ofifo*]
-        (println cmd)
-        (.flush *out*))
-      (let [b (byte-array 5)]
-        (while (= -1 (.read *ififo* b))
-          (Thread/sleep 1))
-        (-> b String. s/trim Integer/parseInt)))
-    -1))
+  (swap! *box-cmds* conj cmd))
 
 (defn git
   [{:keys [^File gitdir ok-statuses sh-opts]
@@ -695,7 +685,7 @@
   [proj target & args]
   (let [p (adj-path *pwd* target)]
     (sh "mkdir" "-p" p)
-    (fcmd (str "target_dir='" (.getAbsolutePath p) "'"))
+    (box-cmd (str "target_dir='" (.getAbsolutePath p) "'"))
     (apply box-init proj target args)))
 
 (defn box-remove
@@ -714,27 +704,22 @@
           (print (str " " p)))
         (println)))))
 
-(def fifo-timeout 1000 #_milliseconds)
-
 (declare voom)
 (defn box
   "Entry point for the box shell alias, not to be used manually."
   [proj & args]
-  (let [[^String ver ^String pwd ^String ififo ^String ofifo & rargs] args
-        _ (assert (= "1" ver)
-                  "Box subtasks must be called using a box alias (version 1)")
-        fpwd (File. pwd)
-        fofifo (future (-> ofifo FileOutputStream. OutputStreamWriter.))
-        fififo (future (-> ififo FileInputStream.))]
+  (let [[^String ver ^String pwd ^String box-cmd-file & rargs] args
+        _ (assert (= "2" ver)
+                  "Box subtasks must be called using a box alias (version 2)")
+        fpwd (File. pwd)]
     (binding [*pwd* fpwd
-              *ofifo* (deref fofifo fifo-timeout nil)
-              *ififo* (deref fififo fifo-timeout nil)]
-      (if (and *ofifo* *ififo*)
-        (.read *ififo* (byte-array 5))
-        (println "INFO: fifo failed -- no env changes will be attempted."))
+              *box-cmds* (atom [])]
       (apply voom proj rargs)
-      ;; TODO formalizE break/exit handling
-      (fcmd "break"))))
+      (->>
+       *box-cmds*
+       deref
+       (s/join "\n")
+       (spit box-cmd-file)))))
 
 ;; === lein entrypoint ===
 
