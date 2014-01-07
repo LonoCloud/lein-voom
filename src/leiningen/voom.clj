@@ -663,9 +663,9 @@
 (defn box-add
   "Add a lein project to this box"
   [proj & adeps]
-  (let [repo-dbs (all-repo-dbs)
-        deps (fold-args-as-meta (map edn/read-string adeps))]
-    (ensure-deps-repos deps)
+  (let [deps (fold-args-as-meta (map edn/read-string adeps))
+        _ (ensure-deps-repos deps)
+        repo-dbs (all-repo-dbs)]
     (doseq [dep deps
             :let [repo-infos (newest-voom-ver-by-spec repo-dbs dep (-> dep meta :voom))]]
       (println "box adding" (str (-> dep meta :voom)) dep)
