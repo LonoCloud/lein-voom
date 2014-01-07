@@ -46,8 +46,8 @@
                        cmdline)))
 
 (defn box-cmd
-  [cmd]
-  (swap! *box-cmds* conj cmd))
+  [& cmd]
+  (swap! *box-cmds* conj (apply str cmd)))
 
 (defn git
   [{:keys [^File gitdir ok-statuses sh-opts]
@@ -619,13 +619,17 @@
           (do (sh "rm" "-f" pdir)
               (sh "rm" "-rf" checkout))))
 
+(defn proj-id->name
+  [proj]
+  (-> (str proj)
+      (s/replace #"/" "--")))
+
 (defn box-repo-add
   [{:keys [repo gitdir branch sha proj path verify]}]
   (assert (contains? #{nil :ok} verify))
   (if-let [bdir (find-box)]
     (let [sha (str sha)
-          pname (-> (str proj)
-                    (s/replace #"/" "--"))
+          pname (proj-id->name proj)
           pdir (adj-path bdir pname)
           checkout (adj-path bdir task-dir pname)
           g {:gitdir checkout}]
@@ -685,7 +689,7 @@
   [proj target & args]
   (let [p (adj-path *pwd* target)]
     (sh "mkdir" "-p" p)
-    (box-cmd (str "target_dir='" (.getAbsolutePath p) "'"))
+    (box-cmd "target_dir='" (.getAbsolutePath p) "'")
     (apply box-init proj target args)))
 
 (defn box-remove
