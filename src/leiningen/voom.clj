@@ -693,11 +693,12 @@
   [proj & args]
   (doseq [a args
           :let [prjs (resolve-short-proj a (all-boxes))]]
-    (if (= 1 (count prjs))
-      (let [box-root (find-box)
-            link (adj-path box-root (first prjs))
-            repo (adj-path box-root task-dir (first prjs))]
-        (safe-delete-repo repo link))
+    (case (count prjs)
+      0 (println "Project directory not found for:" a)
+      1 (let [box-root (find-box)
+              link (adj-path box-root (first prjs))
+              repo (adj-path box-root task-dir (first prjs))]
+          (safe-delete-repo repo link))
       (do
         (print (str "Cannot remove '" a "', multiple matches:"))
         (doseq [p prjs]
