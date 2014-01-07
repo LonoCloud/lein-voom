@@ -671,7 +671,12 @@
       (println "box adding" (str (-> dep meta :voom)) dep)
       (case (count repo-infos)
         0 (throw (ex-info "Could not find matching projects" {:dep dep}))
-        1 (box-repo-add (first repo-infos))
+        1 (let [repo-info (first repo-infos)
+                pname (proj-id->name (:proj repo-info))
+                pdir (adj-path *pwd* pname)]
+            (box-repo-add repo-info)
+            (when (= dep (first deps))
+              (box-cmd "target_dir='" (.getAbsolutePath pdir) "'")))
         (do
           (print "Multiple projects / locations match" (str \" dep \"\:))
           (print-repo-infos repo-infos))))))
