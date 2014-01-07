@@ -34,6 +34,8 @@ function run_box_job {
     local cli_version=2
     \lein voom :box "$cli_version" "$target_dir" "$tfile" ":box-${cmd}" "$@"
 
+    \source "$tfile"
+
     # Return to our target location, as much as it still exists.
     local d="$target_dir"
     while ! [[ -d "$d" ]]; do d=$(dirname "$d"); done
