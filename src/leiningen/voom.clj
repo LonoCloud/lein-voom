@@ -83,6 +83,7 @@
         fmt (str "--pretty=" shafmt ",%cd")
         path (get {"" "."} path path)
         {:keys [out]} (git {:gitdir gitdir} "log" "-1" fmt path)
+        _ (assert (seq out) "No committed changes?")
         [sha, datestr] (-> out s/trim (s/split #"," 2))
         ctime (Date. ^String datestr)]
     {:ctime ctime :sha sha}))
