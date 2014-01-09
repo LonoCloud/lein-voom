@@ -546,7 +546,9 @@
   (when (not-any? #{"--no-fetch"} args)
     (fetch-all))
   (let [prj-file-name (str (:root project) "/project.clj")
-        old-deps (:dependencies project)
+        ;; Read project.clj instead of taking lein's read of it, to be
+        ;; as similar as possible to reading the tmp file later.
+        old-deps (:dependencies (project/read (str prj-file-name)))
         repo-dbs (all-repo-dbs)
         desired-new-deps (doall (map #(fresh-version repo-dbs %) old-deps))]
     (doseq [[[prj old-ver] [_ new-ver]] (map list old-deps desired-new-deps)]
@@ -564,14 +566,16 @@
         (spit tmp-file
               (rewrite-project-file (slurp prj-file-name) replacement-map))
 
-        (if (= desired-new-deps (:dependencies (project/read (str tmp-file))))
-          (.renameTo tmp-file (File. prj-file-name))
-          (throw (ex-info (str "Freshen mis-fire. See "
-                               tmp-file " for attempted change.")
-                          {:old-deps old-deps
-                           :replacement-map replacement-map
-                           :desired-new-deps desired-new-deps
-                           :tmp-file-name (str tmp-file)})))))))
+        (let [new-deps (:dependencies (project/read (str tmp-file)))]
+          (if (= desired-new-deps new-deps)
+            (.renameTo tmp-file (File. prj-file-name))
+            (throw (ex-info (str "Freshen mis-fire. See "
+                                 tmp-file " for attempted change.")
+                            {:old-deps old-deps
+                             :replacement-map replacement-map
+                             :desired-new-deps desired-new-deps
+                             :new-deps new-deps
+                             :tmp-file-name (str tmp-file)}))))))))
 
 (defn resolve-short-proj
   [dep projects]
