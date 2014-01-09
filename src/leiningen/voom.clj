@@ -27,6 +27,7 @@
             Closeable]
            [java.util.logging Logger Handler Level]
            [org.sonatype.aether.util.version GenericVersionScheme]
+           [org.sonatype.aether.resolution ArtifactDescriptorException]
            [org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 (set! *warn-on-reflection* true)
@@ -280,9 +281,14 @@
   [e]
   (for [^Exception cause (iterate #(.getCause ^Exception %) e)
         :while cause
-        :when (instance? ArtifactNotFoundException cause)]
-    (let [art (.getArtifact ^ArtifactNotFoundException cause)]
-      (select-keys (bean art) [:groupId :artifactId :version]))))
+        :let [artifact (cond
+                        (instance? ArtifactNotFoundException cause)
+                        (.getArtifact ^ArtifactNotFoundException cause)
+
+                        (instance? ArtifactDescriptorException cause)
+                        (.getArtifact (.getResult ^ArtifactDescriptorException cause)))]
+        :when artifact]
+    (select-keys (bean artifact) [:groupId :artifactId :version])))
 
 
 ;; === build-deps ===
