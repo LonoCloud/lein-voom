@@ -221,7 +221,15 @@
      (doseq [^File d dirs]
        (let [repo (-> (remotes d) :origin :fetch)]
          (println "Fetching:" repo (print-str (list (.getName d))))
-         (git {:gitdir d} "fetch")))))
+         (try
+           (git {:gitdir d} "fetch")
+           (catch clojure.lang.ExceptionInfo e
+             (let [data (ex-data e)]
+               (if (:git data)
+                 (println (str (.getMessage e) "\n"
+                               (pr-str (select-keys data [:git :exit])) "\n"
+                               (:err data)))
+                 (throw e)))))))))
 
 (defn find-project
   [pgroup pname candidate]
