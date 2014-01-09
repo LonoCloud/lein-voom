@@ -18,7 +18,7 @@
 # like to. (It will call the calling context to exit.)
 
 function run_box_job {
-    local tfile=$(mktemp -t voom-box)
+    local tfile=$(mktemp -t voom-box-XXXXXX)
     local target_dir="$PWD"
     local cmd="${1:-help}"; shift
 
