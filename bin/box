@@ -23,9 +23,9 @@ function run_box_job {
     local cmd="${1:-help}"; shift
 
     local d="$target_dir"
-    while [[ "/" != $(\cd -P $d && \pwd) ]]; do
+    while [[ "/" != $(command cd -P $d && \pwd) ]]; do
         if [[ -d "$d/.voom-box" ]]; then
-           \cd $(\cd -P $d && \pwd)
+           command cd $(command cd -P $d && \pwd)
            break
         fi
         d="$d/.."
@@ -39,7 +39,7 @@ function run_box_job {
     # Return to our target location, as much as it still exists.
     local d="$target_dir"
     while ! [[ -d "$d" ]]; do d=$(dirname "$d"); done
-    \cd "$d"
+    command cd "$d"
 
     \rm "$tfile"
 }
