@@ -65,7 +65,7 @@
   (doseq [repo repos]
     (sh/with-sh-dir root-path
       (sh "cp" "-a" repo (str repo "-upstream"))
-      (sh "git" "clone" (str repo "-upstream") (str voom/repos-home "/" repo)))))
+      (sh "git" "clone" (str repo "-upstream") (str voom/voom-repos "/" repo)))))
 
 (defn crank [root-path]
   (doto root-path
