@@ -142,8 +142,6 @@ manually clone the required git repo themselves.
 
 ### voom freshen
 
-[Not yet implemented]
-
 One use case not yet addressed is when you are ready to use newer
 versions of your dependencies. You can, of course, do this manually by
 checking your git repos and constructing the appropriate voom-version
