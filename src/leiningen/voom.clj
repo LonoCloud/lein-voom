@@ -651,6 +651,7 @@
           pname (proj-id->name proj)
           pdir (adj-path bdir pname)
           checkout (adj-path bdir task-dir pname)
+          rel-checkout (str task-dir "/" pname)
           g {:gitdir checkout}]
       (when (and (.exists ^File checkout)
                  (not= repo (-> (remotes (:gitdir g)) :origin :fetch)))
@@ -663,7 +664,7 @@
       (git g "checkout" branch)
       (sh "rm" "-f" pdir)
       ;; (SYMLINK WILL NEED TO BE UPDATED FOR EACH CHECKOUT)
-      (sh "ln" "-s" (adj-path checkout path) pdir))
+      (sh "ln" "-s" rel-checkout pdir))
     (println "Can't find box")))
 
 (defn fold-args-as-meta
