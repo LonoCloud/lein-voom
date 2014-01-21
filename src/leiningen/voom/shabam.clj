@@ -33,7 +33,7 @@
           m (bit-set 0 o)
           v (aget bm w)
           mv (bit-and v m)]
-      (pos? mv))))
+      (not (zero? mv)))))
 
 (defn ^"[J" bm-or
   [& bms]
