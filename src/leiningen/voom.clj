@@ -992,7 +992,7 @@
                          (q pldb [par]
                             (r-commit-parent frame par)))]
             (recur shabam
-                   (-> stack
+                   (-> (pop stack)
                        (conj (into [frame] parents)) ;; to add myself later
                        (into parents)))))) ;; have parents check themselves
       {:shabam shabam :pldb pldb})))
