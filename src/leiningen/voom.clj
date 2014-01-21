@@ -978,7 +978,7 @@
 
 (defn build-shabam
   [{:keys [shabam pldb]} tips]
-  (loop [shabam shabam, stack (vec tips)]
+  (loop [shabam shabam, stack (vec (sort-by str tips))]
     (if-let [frame (peek stack)]
       (if (vector? frame)
         ;; parents all added themselves
