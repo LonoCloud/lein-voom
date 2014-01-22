@@ -651,7 +651,7 @@
           pname (proj-id->name proj)
           pdir (adj-path bdir pname)
           checkout (adj-path bdir task-dir pname)
-          rel-checkout (str task-dir "/" pname)
+          rel-checkout (adj-path (File. ^String task-dir) pname path)
           g {:gitdir checkout}]
       (when (and (.exists ^File checkout)
                  (not= repo (-> (remotes (:gitdir g)) :origin :fetch)))
