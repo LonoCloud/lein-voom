@@ -185,7 +185,7 @@ new version that other projects can reliably depend upon.
   include deps that aren't available for download anywhere (may be
   partially mitigated by a plugin dep).
 
-- Using `build-deps` guarantees a partiuclar artifact is built from the same sources, but not necessarily using the same tools or in the same environment.  Therefore there may still be differences between artifacts built in different environments, even if they have identical version strings.
+- Using `build-deps` guarantees a particular artifact is built from the same sources, but not necessarily using the same tools or in the same environment.  Therefore there may still be differences between artifacts built in different environments, even if they have identical version strings.
 
 - Long, strange-looking version numbers may confuse some users
 
@@ -197,7 +197,7 @@ the voom version for the project at or after the merge will
 arbitrarily choose the change on one of the legs.  The newest-query
 (freshen and box add) will list both and must not include the merge.
 If the merge commit were included, an attempt to resolve that voom
-version would cause a built at the merge, generating a artifact with a
+version would cause a build at the merge, generating an artifact with a
 sha from one of the legs, and the dependency would remain unresolved.
 
 
