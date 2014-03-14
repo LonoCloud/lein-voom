@@ -147,13 +147,31 @@
    {}
    (:lines (git {:gitdir gitdir} "remote" "-v"))))
 
+(defn https-credentials []
+  (let [creds (keep #(System/getenv %) ["VOOM_GH_USER" "VOOM_GH_PASS"])]
+    (when (seq creds) (vec creds))))
+
+(defn github-ssh-repo? [^String repo]
+  (.startsWith repo "git@github.com"))
+
+(defn github-ssh-path [^String ssh-repo]
+  (second (first (re-seq #"git@github.com:(.*)" ssh-repo))))
+
+(defn https-url-for [[user pass :as creds] ^String repo-path]
+  (str "https://" user ":" pass "@github.com/" repo-path))
+
 (defn ensure-repo
   "Makes sure the task-dir contains the specified repo, cloning it if not found."
   [^String repo]
   (let [repo-dir (->> repo .getBytes ^bytes b64/encode String. (io/file voom-repos))]
     (if (.exists repo-dir)
       true
-      (:bool (git {} "clone" repo repo-dir)))))
+      (let [clone-repo (if (and (github-ssh-repo? repo) (https-credentials))
+                         (let [https-repo (https-url-for (https-credentials) (github-ssh-path repo))]
+                           (println (format "Using %s instead of %s to clone" https-repo repo))
+                           https-repo)
+                         repo)]
+        (:bool (git {} "clone" clone-repo repo-dir))))))
 
 (defn ancestor?
   [gitdir old new]
