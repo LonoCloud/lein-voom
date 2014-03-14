@@ -148,7 +148,8 @@
    (:lines (git {:gitdir gitdir} "remote" "-v"))))
 
 (defn https-credentials []
-  (let [creds (keep #(System/getenv %) ["VOOM_GH_USER" "VOOM_GH_PASS"])]
+  (let [creds (keep #(System/getenv %)
+                    ["EXPERIMENTAL_VOOM_GH_USER" "EXPERIMENTAL_VOOM_GH_PASS"])]
     (when (seq creds) (vec creds))))
 
 (defn github-ssh-repo? [^String repo]
