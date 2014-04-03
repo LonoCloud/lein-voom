@@ -70,7 +70,7 @@
 
 ;; === git sha-based versions ===
 
-(def timestamp-fmt "yyyyMMdd_hhmmss")
+(def timestamp-fmt "yyyyMMdd_HHmmss")
 
 (defn formatted-timestamp
   [^String fmt t]
