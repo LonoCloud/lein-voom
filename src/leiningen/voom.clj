@@ -181,7 +181,7 @@
 
 (defn dirty-repo?
   [gitdir]
-  (git {:gitdir gitdir} "fetch")
+  (git {:gitdir gitdir} "fetch" "--all")
   (let [g {:gitdir gitdir}
         dirty (:lines (git g "status" "--short"))
         stashes (:lines (git g "stash" "list"))
@@ -242,7 +242,7 @@
        (let [repo (-> (remotes d) :origin :fetch)]
          (println "Fetching:" repo (print-str (list (.getName d))))
          (try
-           (git {:gitdir d} "fetch")
+           (git {:gitdir d} "fetch" "--all")
            (catch clojure.lang.ExceptionInfo e
              (let [data (ex-data e)]
                (if (:git data)
@@ -677,7 +677,7 @@
                  (not= repo (-> (remotes (:gitdir g)) :origin :fetch)))
         (safe-delete-repo checkout pdir))
       (if (.exists ^File checkout)
-        (git g "fetch")
+        (git g "fetch" "--all")
         (git {} "clone" repo "--refer" gitdir checkout))
       (safe-checkout checkout sha) ; must detach head for update...
       (git g "branch" "-f" branch sha)
