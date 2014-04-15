@@ -997,7 +997,7 @@
           (pldb/db-fact r-commit-path sha dir-path)))))
 
 (defn build-shabam
-  [{:keys [shabam pldb]} tips]
+  [{:keys [shabam pldb] :as db} tips]
   (loop [shabam shabam, stack (vec (sort-by str tips))]
     (if-let [frame (peek stack)]
       (if (vector? frame)
@@ -1015,7 +1015,7 @@
                    (-> (pop stack)
                        (conj (into [frame] parents)) ;; to add myself later
                        (into parents)))))) ;; have parents check themselves
-      {:shabam shabam :pldb pldb})))
+      (assoc db :shabam shabam))))
 
 (defn add-git-facts
   [db gitdir]
@@ -1041,10 +1041,10 @@
                             gitdir (vals new-branches) (vals old-branches)))]
             (->/assoc :pldb (add-commit-facts gitdir commit)))
 
-          (build-shabam (vals new-branches))
-          (vary-meta assoc ::dirty true))))))
+          (vary-meta assoc ::dirty true)))
+      (build-shabam (vals new-branches)))))
 
-(def voomdb-header "voom-db-8")
+(def voomdb-header "voom-db-9")
 
 (defn ^File git-db-file
   [gitdir]
@@ -1053,12 +1053,12 @@
 (defn read-git-db
   [gitdir]
   (let [file (git-db-file gitdir)
-        [header & [shabam & reldata]] (-> file
+        [header & reldata] (-> file
                                io/input-stream
                                java.util.zip.GZIPInputStream.
                                (fress/read :handlers sha/read-handlers))]
     (if (= header voomdb-header)
-      {:shabam (update-in shabam [:bitmaps] vec)
+      {:shabam (shabam-new)
        :pldb
        , (vdb/from-reldata
           [r-branch r-commit r-commit-parent r-commit-path r-proj-path r-proj]
@@ -1079,7 +1079,6 @@
                                 :handlers sha/write-handlers))]
     (fress/begin-open-list w)
     (fress/write-object w voomdb-header)
-    (fress/write-object w (:shabam db))
     (doseq [item (vdb/to-reldata (:pldb db))]
       (fress/write-object w item))))
 
