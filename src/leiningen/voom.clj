@@ -785,13 +785,13 @@
 ;; === lein entrypoint ===
 
 (defn wrap-expected-version-helper [kargset]
-  (->
-   (->>
-    (map name kargset)
-    (filter #(.startsWith ^String % "expected-version--")))
-   first
-   (s/replace-first #"expected-version--" "")
-   (ver-parse)))
+  (when-let [res (->>
+                  (map name kargset)
+                  (filter #(.startsWith ^String % "expected-version--"))
+                  first)]
+    (-> res
+        (s/replace-first #"expected-version--" "")
+        (ver-parse))))
 
 (defn- wrap-version-correction-helper
   "Unfortunately, we need this fix forever...
@@ -802,7 +802,7 @@
   still ensures that the sha is identical and will only adjust the
   time when the old version of voom would have truncated the hours."
   [expected-version found-version]
-  (if (= found-version expected-version)
+  (if (or (not expected-version) (= found-version expected-version))
     found-version
     (do
       (assert (= (:sha expected-version) (:sha found-version)))
