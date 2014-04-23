@@ -21,7 +21,7 @@
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
-           [java.util Date]
+           [java.util Calendar Date]
            [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter
             Closeable]
@@ -78,6 +78,12 @@
              (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT")))
            t))
 
+(defn parse-formatted-timestamp
+  [^String fmt ^String ts]
+  (.parse (doto (java.text.SimpleDateFormat. fmt java.util.Locale/US)
+             (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT")))
+           ts))
+
 (defn get-voom-version
   [path & {:keys [long-sha? gitdir]}]
   (let [shafmt (if long-sha? "%H" "%h")
@@ -99,10 +105,13 @@
          "-" (formatted-timestamp timestamp-fmt ctime)
          "-g" (re-find #"^.{4,7}" (str sha)))))
 
-(defn update-proj-version
+(defn get-project-version
   [project long-sha?]
-  (let [gver (-> project :root (get-voom-version :long-sha? long-sha?))
-        upfn #(format-voom-ver (assoc gver :version %))
+  (-> project :root (get-voom-version :long-sha? long-sha?)))
+
+(defn update-proj-version
+  [project gver]
+  (let [upfn #(format-voom-ver (assoc gver :version %))
         nproj (update-in project [:version] upfn)
         nmeta (update-in (meta project) [:without-profiles :version] upfn)
         nnproj (with-meta nproj nmeta)]
@@ -117,9 +126,10 @@
      foo-1.2.3-20120219_223112-abc123f
      /path/to/foo-1.2.3-20120219_223112-gabc123f19ea8d29b13.jar"
   [ver-str]
-  (let [[_ ctime sha] (re-matches #".*-?([0-9]{8}_?[0-9]{6})-g?([a-f0-9]{4,40})(?:\.jar)?$" ver-str)]
-    (when (and ctime sha)
-      {:ctime (s/replace ctime #"_" "") :sha sha})))
+  (let [[_ ctime-str sha] (re-matches #".*-?([0-9]{8}_?[0-9]{6})-g?([a-f0-9]{4,40})(?:\.jar)?$" ver-str)]
+    (when (and ctime-str sha)
+      (let [ctime (parse-formatted-timestamp timestamp-fmt ctime-str)]
+        {:ctime ctime :sha sha}))))
 
 (defn dirty-wc?
   [path]
@@ -280,13 +290,14 @@
             sha-candidates)))
 
 (defn install-versioned-artifact
-  [proot]
+  [version proot]
   (println "Calling recursive build-deps on:" proot)
   (print (:out (sh "lein" "voom" "build-deps" :dir proot)))
   ;; BEWARE: Allowing dirty working copy here is ONLY OK because the
   ;; working copy in question was just checked out and cleaned using
   ;; 'safe-checkout in 'find-matching-projects above:
   (let [install-cmd ["lein" "voom" "wrap" ":insanely-allow-dirty-working-copy"
+                     (str ":expected-version--" version)
                      "install" :dir proot]
         _ (apply println "install-versioned-artifact:" install-cmd)
         rtn (apply sh install-cmd)]
@@ -344,7 +355,7 @@
         (doseq [prj prjs]
           (println "->" (:root prj))))
       (doseq [prj prjs]
-        (install-versioned-artifact (:root prj))))
+        (install-versioned-artifact version (:root prj))))
     (throw (ex-info (str "Not parseable as voom-version: " version) {:artifact art} old-exception))))
 
 (def null-writer
@@ -773,6 +784,47 @@
 
 ;; === lein entrypoint ===
 
+(defn wrap-expected-version-helper [kargset]
+  (->
+   (->>
+    (map name kargset)
+    (filter #(.startsWith ^String % "expected-version--")))
+   first
+   (s/replace-first #"expected-version--" "")
+   (ver-parse)))
+
+(defn- wrap-version-correction-helper
+  "Unfortunately, we need this fix forever...
+  The original voom versions created used a 12hr format, discarding
+  24hr information. Once this was fixed, voom was unable to satisfy
+  old, 12hr truncated dependencies. The this function detects this
+  case and will generate a 12hr truncated version if requested. It
+  still ensures that the sha is identical and will only adjust the
+  time when the old version of voom would have truncated the hours."
+  [expected-version found-version]
+  (if (= found-version expected-version)
+    found-version
+    (do
+      (assert (= (:sha expected-version) (:sha found-version)))
+      (let [^Date found-date (:ctime found-version)
+            ^Calendar found-cal (Calendar/getInstance
+                                 (java.util.SimpleTimeZone. 0 "GMT")
+                                 java.util.Locale/US)
+            _ (.setTime found-cal found-date)
+            adjusted-hours (mod (.get found-cal Calendar/HOUR_OF_DAY) 12)
+            _ (.set found-cal Calendar/HOUR_OF_DAY adjusted-hours)
+            ^Date adjusted-date (.getTime found-cal)]
+        (if (= adjusted-date (:ctime expected-version))
+          (do
+            ;; TODO: Unfortunately, the recursive build-deps calls are
+            ;; eating this warning. Find a way to get message back to user.
+            (binding [*out* *err*]
+              (println (str "Found and fixed 24hr->12hr legacy voom version: "
+                            (pr-str found-version :--> expected-version))))
+            expected-version)
+          (throw (ex-info "Could not resolve expected vs found timestamps."
+                          {:expected-version expected-version :found-version found-version})))))))
+
 (defn wrap
   "Execute any lein task, but using git info as this project's version qualifier.
 
@@ -788,7 +840,10 @@
   [project & args]
   (let [[kw-like more-args] (split-with #(re-find #"^:" %) args)
         kargset (set (map edn/read-string kw-like))
-        new-project (update-proj-version project (:long-sha kargset))
+        expected-version (wrap-expected-version-helper kargset)
+        found-version (get-project-version project (:long-sha kargset))
+        version (wrap-version-correction-helper expected-version found-version)
+        new-project (update-proj-version project version)
         dirty? (dirty-wc? (:root project))]
     ;; TODO throw exception if upstream doesn't contain this commit :no-upstream
     ;;    :no-upstream - by default voom wants to see the current
