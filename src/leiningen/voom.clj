@@ -293,9 +293,14 @@
   [version proot]
   (println "Calling recursive build-deps on:" proot)
   (print (:out (sh "lein" "voom" "build-deps" :dir proot)))
-  ;; BEWARE: Allowing dirty working copy here is ONLY OK because the
+  ;; Before getting here 'find-matching-projects had already called
+  ;; 'safe-checkout but "build-deps" dependencies may have modified
+  ;; the working-copy along the way so we make sure we're again at the
+  ;; right version before installing.
+  (safe-checkout proot (-> version ver-parse :sha))
+  ;; NOTE: Allowing dirty working copy here is ONLY OK because the
   ;; working copy in question was just checked out and cleaned using
-  ;; 'safe-checkout in 'find-matching-projects above:
+  ;; 'safe-checkout above.
   (let [install-cmd ["lein" "voom" "wrap" ":insanely-allow-dirty-working-copy"
                      (str ":expected-version--" version)
                      "install" :dir proot]
