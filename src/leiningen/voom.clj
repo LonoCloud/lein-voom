@@ -21,7 +21,8 @@
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
   (:import [clojure.lang #_IPersistentVector Seqable]
-           [java.util Calendar Date]
+           [java.text SimpleDateFormat]
+           [java.util Calendar Date Locale SimpleTimeZone]
            [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter
             Closeable]
@@ -72,9 +73,9 @@
 
 (def timestamp-fmt "yyyyMMdd_HHmmss")
 
-(defn gmt-date-formatter [^String fmt]
-  (doto (java.text.SimpleDateFormat. fmt java.util.Locale/US)
-    (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT"))))
+(defn ^SimpleDateFormat gmt-date-formatter [^String fmt]
+  (doto (SimpleDateFormat. fmt Locale/US)
+    (.setTimeZone (SimpleTimeZone. 0 "GMT"))))
 
 (defn formatted-timestamp
   [^String fmt t]
@@ -813,8 +814,8 @@
       (assert (= (:sha expected-version) (:sha found-version)))
       (let [^Date found-date (:ctime found-version)
             ^Calendar found-cal (Calendar/getInstance
-                                 (java.util.SimpleTimeZone. 0 "GMT")
-                                 java.util.Locale/US)
+                                 (SimpleTimeZone. 0 "GMT")
+                                 Locale/US)
             _ (.setTime found-cal found-date)
             adjusted-hours (mod (.get found-cal Calendar/HOUR_OF_DAY) 12)
             adjusted-hours (if (= 0 adjusted-hours) 12 adjusted-hours)
