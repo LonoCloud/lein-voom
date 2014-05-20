@@ -817,6 +817,7 @@
                                  java.util.Locale/US)
             _ (.setTime found-cal found-date)
             adjusted-hours (mod (.get found-cal Calendar/HOUR_OF_DAY) 12)
+            adjusted-hours (if (= 0 adjusted-hours) 12 adjusted-hours)
             _ (.set found-cal Calendar/HOUR_OF_DAY adjusted-hours)
             ^Date adjusted-date (.getTime found-cal)]
         (if (= adjusted-date (:ctime expected-version))
