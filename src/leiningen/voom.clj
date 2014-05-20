@@ -12,7 +12,6 @@
             [clojure.walk :as walk]
             [leiningen.core.project :as project]
             [leiningen.core.main :as lmain]
-            [leiningen.help]
             [leiningen.voom.long-sha :as sha :only [mk]]
             [leiningen.voom.pldb :as vdb]
             [leiningen.voom.shabam :refer [shabam-new shabam-contains? shabam-add
@@ -1260,11 +1259,18 @@
      :repo found-repo
      :branch found-branch}))
 
+(defn- lein-help
+  [& args]
+  ;; NOTE: The below require is done on-demand as to avoid problems
+  ;; with Immutant's classloader. cf. lein-voom issue #28.
+  (do (require 'leiningen.help)
+      (apply (resolve 'leiningen.help/help) args)))
+
 (defn help
   "Display this help message"
   ([] nil) ;; Tell lein not to use this fn as help for voom
-  ([project] (leiningen.help/help project "voom"))
-  ([project subtask] (leiningen.help/help project "voom" subtask)))
+  ([project] (lein-help project "voom"))
+  ([project subtask] (lein-help project "voom" subtask)))
 
 (def ^{:doc "Display this help message"} box-help help)
 
