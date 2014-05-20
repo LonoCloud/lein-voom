@@ -72,17 +72,17 @@
 
 (def timestamp-fmt "yyyyMMdd_HHmmss")
 
+(defn gmt-date-formatter [^String fmt]
+  (doto (java.text.SimpleDateFormat. fmt java.util.Locale/US)
+    (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT"))))
+
 (defn formatted-timestamp
   [^String fmt t]
-  (.format (doto (java.text.SimpleDateFormat. fmt java.util.Locale/US)
-             (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT")))
-           t))
+  (.format (gmt-date-formatter fmt) t))
 
 (defn parse-formatted-timestamp
   [^String fmt ^String ts]
-  (.parse (doto (java.text.SimpleDateFormat. fmt java.util.Locale/US)
-             (.setTimeZone (java.util.SimpleTimeZone. 0 "GMT")))
-           ts))
+  (.parse (gmt-date-formatter fmt) ts))
 
 (defn get-voom-version
   [path & {:keys [long-sha? gitdir]}]
