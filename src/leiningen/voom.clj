@@ -176,7 +176,7 @@
   [^String repo]
   (let [repo-dir (->> repo .getBytes ^bytes b64/encode String. (io/file voom-repos))]
     (if (.exists repo-dir)
-      true
+      (:bool (git {:gitdir repo-dir} "fetch"))
       (let [clone-repo (if (and (github-ssh-repo? repo) (https-credentials))
                          (let [https-repo (https-url-for (https-credentials) (github-ssh-path repo))]
                            (println (format "Using %s instead of %s to clone" https-repo repo))
@@ -716,26 +716,34 @@
         (conj deps fdep))
       deps)))
 
-(defn box-add
-  "Add a lein project to this box"
-  [proj & adeps]
+(defn box-add-helper
+  [retry? proj & adeps]
   (let [deps (fold-args-as-meta (map edn/read-string adeps))
         _ (ensure-deps-repos deps)
         repo-dbs (all-repo-dbs)]
     (doseq [dep deps
             :let [repo-infos (newest-voom-ver-by-spec repo-dbs dep (-> dep meta :voom))]]
-      (println "box adding" (str (-> dep meta :voom)) dep)
       (case (count repo-infos)
-        0 (throw (ex-info "Could not find matching projects" {:dep dep}))
+        0 (if retry?
+            (do
+              (fetch-all)
+              (apply box-add-helper false proj adeps))
+            (throw (ex-info "Could not find matching projects" {:dep dep})))
         1 (let [repo-info (first repo-infos)
                 pname (proj-id->name (:proj repo-info))
                 pdir (adj-path *pwd* pname)]
+            (println "box adding" (str (-> dep meta :voom)) dep)
             (box-repo-add repo-info)
             (when (= dep (first deps))
               (box-cmd "target_dir='" (.getAbsolutePath pdir) "'")))
         (do
           (print "Multiple projects / locations match" (str \" dep \"\:))
           (print-repo-infos repo-infos))))))
+
+(defn box-add
+  "Add a lein project to this box"
+  [proj & adeps]
+  (apply box-add-helper true proj adeps))
 
 (defn box-init
   "Initilize existing directory as a box and add named lein projects to it"
