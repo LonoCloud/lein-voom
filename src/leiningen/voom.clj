@@ -176,13 +176,13 @@
   [^String repo]
   (let [repo-dir (->> repo .getBytes ^bytes b64/encode String. (io/file voom-repos))]
     (if (.exists repo-dir)
-      (:bool (git {:gitdir repo-dir} "fetch"))
+      (git {:gitdir repo-dir} "fetch")
       (let [clone-repo (if (and (github-ssh-repo? repo) (https-credentials))
                          (let [https-repo (https-url-for (https-credentials) (github-ssh-path repo))]
                            (println (format "Using %s instead of %s to clone" https-repo repo))
                            https-repo)
                          repo)]
-        (:bool (git {} "clone" clone-repo repo-dir))))))
+        (git {} "clone" clone-repo repo-dir)))))
 
 (defn ancestor?
   [gitdir old new]
