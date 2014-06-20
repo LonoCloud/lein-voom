@@ -60,13 +60,16 @@
         all-args (concat subcmd cmd-args sh-opts)
         ;; _ (prn :calling (doall (cons 'git all-args)))
         {:keys [exit] :as rtn} (apply sh "git" all-args)
-        rtn (assoc rtn :bool (if (zero? (:exit rtn))
-                               true
-                               false))]
-    (when-not (ok-statuses exit)
-      (throw (ex-info "git error" (assoc rtn :git all-args))))
-    (assoc rtn :lines (when (not= "\n" (:out rtn))
-                        (re-seq #"(?m)^.*$" (:out rtn))))))
+        rtn (assoc rtn
+              :git all-args
+              :bool (if (zero? (:exit rtn))
+                      true
+                      false)
+              :lines (when (not= "\n" (:out rtn))
+                       (re-seq #"(?m)^.*$" (:out rtn))))]
+    (if (ok-statuses exit)
+      rtn
+      (throw (ex-info "git error" rtn)))))
 
 ;; === git sha-based versions ===
 
