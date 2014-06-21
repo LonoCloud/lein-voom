@@ -46,6 +46,13 @@
                           %)
                        cmdline)))
 
+(defn subprocess
+  [{:keys [dir]} & cmdline]
+  (let [proc (doto (ProcessBuilder. ^java.util.List cmdline)
+               (.directory (File. ^String dir))
+               (.inheritIO))]
+    (.waitFor (.start proc))))
+
 (defn box-cmd
   [& cmd]
   (swap! *box-cmds* conj (apply str cmd)))
@@ -295,7 +302,8 @@
 (defn install-versioned-artifact
   [version proot]
   (println "Calling recursive build-deps on:" proot)
-  (print (:out (sh "lein" "voom" "build-deps" :dir proot)))
+  (safe-checkout proot (-> version ver-parse :sha))
+  (subprocess {:dir proot} "lein" "voom" "build-deps")
   ;; Before getting here 'find-matching-projects had already called
   ;; 'safe-checkout but "build-deps" dependencies may have modified
   ;; the working-copy along the way so we make sure we're again at the
@@ -306,9 +314,9 @@
   ;; 'safe-checkout above.
   (let [install-cmd ["lein" "voom" "wrap" ":insanely-allow-dirty-working-copy"
                      (str ":expected-version--" version)
-                     "install" :dir proot]
-        _ (apply println "install-versioned-artifact:" install-cmd)
-        rtn (apply sh install-cmd)]
+                     "install"]
+        _ (apply println "install-versioned-artifact:" install-cmd {:dir proot})
+        rtn {:exit (apply subprocess {:dir proot} install-cmd)}]
     (when-not (zero? (:exit rtn))
       (throw (ex-info "lein voom install error" (assoc rtn :cmd install-cmd))))
     rtn))
