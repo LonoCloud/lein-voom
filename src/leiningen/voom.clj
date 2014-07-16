@@ -201,7 +201,7 @@
 
 (defn dirty-repo?
   [gitdir]
-  (git {:gitdir gitdir} "fetch" "--all")
+  (git {:gitdir gitdir} "fetch" "--all" "--tags")
   (let [g {:gitdir gitdir}
         dirty (:lines (git g "status" "--short"))
         stashes (:lines (git g "stash" "list"))
