@@ -14,7 +14,7 @@
 # actually change it and be sure to use the "local" qualifier on
 # variable declarations in funtions.
 
-# For the above reasons, we can use set -x no matter how much we would
+# For the above reasons, we can't use set -x no matter how much we would
 # like to. (It will call the calling context to exit.)
 
 function run_box_job {
