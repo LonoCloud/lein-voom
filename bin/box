@@ -15,7 +15,7 @@
 # variable declarations in funtions.
 
 # For the above reasons, we can't use set -x no matter how much we would
-# like to. (It will call the calling context to exit.)
+# like to. (It will cause the calling context to exit.)
 
 function run_box_job {
     local tfile=$(mktemp -t voom-box-XXXXXX)
