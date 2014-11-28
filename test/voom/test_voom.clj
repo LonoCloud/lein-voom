@@ -7,14 +7,15 @@
             [clojure.test.check.generators :as gen]))
 
 (defn dag-samples-gen
-  [dag percent]
-  (let [dag-size (count dag)
-        sample-count (int (* percent dag-size))]
-    (gen/bind (apply gen/tuple
-                     ;; May collide but this is fine.
-                     (repeat (* 2 sample-count) (gen/choose 0 dag-size)))
-              (fn [samples]
-                (gen/tuple (gen/return dag) (gen/return samples))))))
+  [percent]
+  (fn [dag]
+    (let [dag-size (count dag)
+          sample-count (int (* percent dag-size))]
+      (gen/bind (apply gen/tuple
+                       ;; May collide but this is fine.
+                       (repeat (* 2 sample-count) (gen/choose 0 dag-size)))
+                (fn [samples]
+                  (gen/tuple (gen/return dag) (gen/return samples)))))))
 
 (defn gen-dag
   ([] (gen-dag [#{}] 10))
@@ -35,7 +36,7 @@
                              (if (< 0 nodes)
                                (gen-dag (conj dag-so-far (set parents))
                                         (dec nodes))
-                               (dag-samples-gen dag-so-far 1/2))))))))
+                               (gen/return dag-so-far))))))))
 
 
 (defn anc-model-new [] {})
@@ -65,7 +66,8 @@
 (def dag-similarity-props
   (prop/for-all [[dag samples] (gen/bind (gen/choose 0 100)
                                          (fn [dag-size]
-                                           (gen-dag dag-size)))]
+                                           (gen/bind (gen-dag dag-size)
+                                                     (dag-samples-gen 1/2))))]
                 (let [anc (reduce (fn [a [i ps]]
                                     (apply lag/ancestry-add a i (seq ps)))
                                   (lag/ancestry-new)
