@@ -14,8 +14,7 @@
             [leiningen.core.main :as lmain]
             [leiningen.voom.long-sha :as sha :only [mk]]
             [leiningen.voom.pldb :as vdb]
-            [leiningen.voom.shabam :refer [shabam-new shabam-contains? shabam-add
-                                           sha-ancestors sha-successors]]
+            [loom.alg-generic :as lag]
             [lonocloud.synthread :as ->]
             [org.satta.glob :refer [glob]]
             [robert.hooke :as hooke])
@@ -1083,10 +1082,10 @@
       (if (vector? frame)
         ;; parents all added themselves
         (recur
-         (apply shabam-add shabam frame)
+         (apply lag/ancestry-add shabam frame)
          (pop stack))
         ;; no parents checked yet
-        (if (shabam-contains? shabam frame)
+        (if (lag/ancestry-contains? shabam frame)
           (recur shabam (pop stack)) ;; I'm in db. Done.
           (let [parents (seq
                          (q pldb [par]
@@ -1138,7 +1137,7 @@
                                java.util.zip.GZIPInputStream.
                                (fress/read :handlers sha/read-handlers))]
     (if (= header voomdb-header)
-      {:shabam (shabam-new)
+      {:shabam (lag/ancestry-new)
        :pldb
        , (vdb/from-reldata
           [r-branch r-commit r-commit-parent r-commit-path r-proj-path r-proj]
@@ -1147,7 +1146,7 @@
         (println "Existing voomdb file for" (str gitdir)
                  "has wrong header" header "needed:"
                  voomdb-header)
-        {:shabam (shabam-new)
+        {:shabam (lag/ancestry-new)
          :pldb pldb/empty-db}))))
 
 (defn write-git-db
@@ -1166,7 +1165,7 @@
   [gitdir]
   (let [db (-> (if (.exists (git-db-file gitdir))
                  (read-git-db gitdir)
-                 {:shabam (shabam-new) :pldb pldb/empty-db})
+                 {:shabam (lag/ancestry-new) :pldb pldb/empty-db})
                (add-git-facts gitdir))]
     (when (::dirty (meta db))
       (write-git-db db gitdir))
@@ -1191,6 +1190,16 @@
 (defn compare-max [& xs]
   (when (seq xs)
     (reduce #(if (neg? (compare %1 %2)) %2 %1) xs)))
+
+(defn sha-ancestors [anc child ancs]
+  (when (lag/ancestry-contains? anc child)
+    (filter #(lag/ancestor? anc child %)
+            ancs)))
+
+(defn sha-successors [anc parent succs]
+  (when (lag/ancestry-contains? anc parent)
+    (filter #(lag/ancestor? anc % parent)
+            succs)))
 
 (defn newest-voom-ver-by-spec
 "
@@ -1327,7 +1336,7 @@
   (def xdb3 (vdb/from-reldata [r-tree] (fress/read (fress/write (vdb/to-reldata xdb1)))))
   (pldb/with-db xdb3 (l/run* [a] (r-tree a :b :c :d)))
 
-  (time (def db (add-git-facts {:shabam (shabam-new)
+  (time (def db (add-git-facts {:shabam (lag/ancestry-new)
                                 :pldb pldb/empty-db}
                                (io/file voom-repos "lein-voom"))))
   (time (def db (updated-git-db (io/file voom-repos "lein-voom"))))

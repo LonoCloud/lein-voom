@@ -5,11 +5,13 @@
         :url "https://github.com/LonoCloud/lein-voom"}
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[clj-glob "1.0.0"]
+  :dependencies [[aysylu/loom "0.5.0"]
+                 [clj-glob "1.0.0"]
                  [lonocloud/synthread "1.0.5"]
                  [org.clojure/data.codec "0.1.0"]
                  [org.clojure/data.fressian "0.2.0"]
-                 [org.clojure/core.logic "0.8.5"]]
+                 [org.clojure/core.logic "0.8.5"]
+                 [org.clojure/test.check "0.6.1"]]
   :signing {:gpg-key "A4D5C342"}
   :repositories [["sonatype-snapshot" "http://oss.sonatype.org/content/repositories/snapshots"]]
   :eval-in-leiningen true)
