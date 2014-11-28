@@ -1,7 +1,5 @@
 (ns voom.test-voom
   (:require [loom.alg-generic :as lag]
-            [leiningen.voom.shabam :as shabam]
-            [leiningen.voom :as voom]
             [clojure.set :as set]
             [clojure.test.check :as tc]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -72,27 +70,14 @@
                                     (apply lag/ancestry-add a i (seq ps)))
                                   (lag/ancestry-new)
                                   (map-indexed vector dag))
-                      shabam (reduce (fn [a [i ps]]
-                                       (apply shabam/shabam-add a i (seq ps)))
-                                     (shabam/shabam-new)
-                                     (map-indexed vector dag))
                       anc-model (reduce (fn [a [i ps]]
                                           (apply anc-model-add a i (seq ps)))
                                         (anc-model-new)
                                         (map-indexed vector dag))
                       samp-pairs (partition 2 samples)
-                      all-nodes (range (count dag))
                       anc-to-model (anc->anc-model anc)]
                   (and
                    (= anc-model anc-to-model)
-                   (every?
-                    (fn [s]
-                      (and
-                       (= (shabam/sha-ancestors shabam s all-nodes)
-                          (voom/sha-ancestors anc s all-nodes))
-                       (= (shabam/sha-successors shabam s all-nodes)
-                          (voom/sha-successors anc s all-nodes))))
-                    samples)
                    (every?
                     (fn [[a b]]
                       (and
