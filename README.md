@@ -14,6 +14,12 @@ Put `[lein-voom "0.1.0-20140716_032004-g85e4c9b"]` into the `:plugins` vector of
 `:user` profile, or if you are on Leiningen 1.x do `lein plugin install
 voom 0.1.0-20140621_212303-g0e280b9`.
 
+Annotate your voom dependencies in your ```project.clj```. For example:
+```clojure
+^{:voom {:repo "https://github.com/ring-clojure/ring" :branch "1.3"}}
+[ring/ring-core "1.2.3"]
+```
+
 When building and deploying, insert `voom` before the task:
 
     $ lein voom install
@@ -27,6 +33,11 @@ To update your `project.clj` to use the latest versions of your dependencies:
 
     $ lein voom freshen
 
+After ```voom freshen```, our example dependency in ```project.clj``` has been updated:
+```clojure
+^{:voom {:repo "https://github.com/ring-clojure/ring" :branch "1.3"}}
+[ring/ring-core "1.3.0-RC1-20140519_142204-gaf0379b"]
+```
 
 ## The scenario:
 
