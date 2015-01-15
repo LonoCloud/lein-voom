@@ -896,6 +896,20 @@
   [project & args]
   (apply wrap project "deploy" args))
 
+(declare print-git-db read-git-db)
+(defn print-db
+  "Prints the internal database for the specified repo in edn format.
+The repo must be specified exactly as specified in dependencies. i.e.:
+
+  git@github.com/github.com:jclaggett/seqex.git
+
+This is provided for lein-voom developer debug usage."
+  [kwargs repo]
+  (->> (repo->path repo)
+       (io/file voom-repos)
+       read-git-db
+       print-git-db))
+
 
 ;; ===== Git import =====
 
@@ -1164,6 +1178,12 @@
     (doseq [item (vdb/to-reldata (:pldb db))]
       (fress/write-object w item))))
 
+(defn print-git-db
+  [db]
+  (prn [voomdb-header
+        {:pldb (for [item (vdb/to-reldata (:pldb db))]
+                 item)}]))
+
 (defn updated-git-db
   [gitdir]
   (let [db (-> (if (.exists (git-db-file gitdir))
@@ -1306,7 +1326,7 @@
 (def ^{:doc "Display this help message"} box-help help)
 
 (def subtasks [#'build-deps #'deploy #'fetch-all #'find-box #'freshen #'help
-               #'install #'update-repo-dbs #'ver-parse #'wrap
+               #'install #'print-db #'update-repo-dbs #'ver-parse #'wrap
                #'box #'box-new #'box-init #'box-add #'box-remove #'box-help])
 
 ;; Note the docstring for 'voom' is seen when the user runs any of:
