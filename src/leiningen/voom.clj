@@ -180,10 +180,13 @@
 (defn https-url-for [[user pass :as creds] ^String repo-path]
   (str "https://" user ":" pass "@github.com/" repo-path))
 
+(defn repo->path [repo]
+  (->> repo .getBytes ^bytes b64/encode String.))
+
 (defn ensure-repo
   "Makes sure the task-dir contains the specified repo, cloning it if not found."
   [^String repo]
-  (let [repo-dir (->> repo .getBytes ^bytes b64/encode String. (io/file voom-repos))]
+  (let [repo-dir (io/file voom-repos (repo->path repo))]
     (if (.exists repo-dir)
       (git {:gitdir repo-dir} "fetch")
       (let [clone-repo (if (and (github-ssh-repo? repo) (https-credentials))
