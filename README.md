@@ -171,6 +171,48 @@ deps, test everything, fix your code as needed, and push your fixes
 and the updated `project.clj` together. This effectively generates a
 new version that other projects can reliably depend upon.
 
+#### A note about voom freshen versions
+
+`lein voom freshen` will find the newest available version for each
+voom versioned dependency in your `project.clj` dependencies. "Newest,"
+it turns out, is a rather complex notion and the behavior of
+freshening may be surprising in some cases.
+
+At the core of the freshen selection is the Maven notion of version
+sorting. Maven sorts versions according to
+[these rules](http://docs.oracle.com/middleware/1212/core/MAVEN/maven_version.htm).
+
+A key detail to note is that
+[`-SNAPSHOT` is special and magical as a qualifier](http://docs.oracle.com/middleware/1212/core/MAVEN/maven_version.htm#MAVEN401)
+in Maven versions. It signifies that the version is "just prior" to
+the stated version and will sort as a leser version. For example, here
+are some versions shown from latest to earliest:
+
+  1.2.4
+  1.2.4-rc4
+  1.2.4-2-beta
+  1.2.4-SNAPSHOT # Matches 1.2.3 versions but not 1.2.4
+  1.2.3
+
+If you wish to constrain freshen, you can provide a Maven version
+constraint in the voom metadata, using the key `:version-mvn`.
+
+The full voom freshen process follows this pattern:
+
+ 1. consider all version matching a particular project name
+ 1. constrain to a particular git repo, if specified
+ 1. constrain to a particular repo path, if specified
+ 1. constrain to a particular branch if specified
+ 1. constrain to a range of Maven versions, if specified
+ 1. identify max semantic version
+ 1. find most recent commits bearing max semantic version (given above constraints)
+
+If there is a single commit found and it is not the commit currently
+being used by the voom dependency, freshen will write a rewrite the
+project file using the newer dependency. If there is more than one
+commit found at the last step, freshen will stop and present the
+options so the user can add the appropriate constraints to the voom
+metadata.
 
 ### auto freshen
 
