@@ -1210,7 +1210,9 @@ This is provided for lein-voom developer debug usage."
 
 ;; ===== latest version querying =====
 
-(defn compare-max [& xs]
+(defn compare-max
+  "Max using general 'compare' instead of number-only 'max'."
+  [& xs]
   (when (seq xs)
     (reduce #(if (neg? (compare %1 %2)) %2 %1) xs)))
 
@@ -1287,6 +1289,8 @@ This is provided for lein-voom developer debug usage."
                                         candidate))
                                    shas-c)
                              (map (comp first sha-candidates-a) shas-c))
+              ;; Build a sequence of pairs, [parsed-version-object version-string],
+              ;; and find the max version object by comparison but keep version string:
               [_ max-ver-e] (apply compare-max
                                    (map #(vector (when % (.parseVersion gvs %)) %)
                                         (distinct (map :version candidates-d))))
