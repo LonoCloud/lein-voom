@@ -188,11 +188,11 @@ in Maven versions. It signifies that the version is "just prior" to
 the stated version and will sort as a leser version. For example, here
 are some versions shown from latest to earliest:
 
-  1.2.4
-  1.2.4-rc4
-  1.2.4-2-beta
-  1.2.4-SNAPSHOT # Matches 1.2.3 versions but not 1.2.4
-  1.2.3
+    1.2.4
+    1.2.4-rc4
+    1.2.4-2-beta
+    1.2.4-SNAPSHOT # Matches 1.2.3 versions but not 1.2.4
+    1.2.3
 
 If you wish to constrain freshen, you can provide a Maven version
 constraint in the voom metadata, using the key `:version-mvn`.
