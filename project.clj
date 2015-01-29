@@ -15,6 +15,6 @@
   :signing {:gpg-key "A4D5C342"}
   :repositories [["sonatype-snapshot" "http://oss.sonatype.org/content/repositories/snapshots"]]
   :eval-in-leiningen true
-  :profiles {:dev {:dependencies [[leiningen-core "2.5.1"]]}
+  :profiles {:leiningen-core-2.5.1 {:dependencies [[leiningen-core "2.5.1"]]}
              :clojure-1.5 {:dependencies [[org.clojure/clojure "1.5.0"]]}
              :clojure-1.6 {:dependencies [[org.clojure/clojure "1.6.0"]]}})
