@@ -10,9 +10,9 @@ lein-voom is a Leiningen plugin that helps you clean up your dependency tree.
 
 Use this for user-level plugins:
 
-Put `[lein-voom "0.1.0-20140716_032004-g85e4c9b"]` into the `:plugins` vector of your
+Put `[lein-voom "0.1.0-20150115_230705-gd96d771"]` into the `:plugins` vector of your
 `:user` profile, or if you are on Leiningen 1.x do `lein plugin install
-voom 0.1.0-20140621_212303-g0e280b9`.
+voom 0.1.0-20150115_230705-gd96d771`.
 
 When building and deploying, insert `voom` before the task:
 
