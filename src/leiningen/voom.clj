@@ -32,11 +32,19 @@
 (set! *warn-on-reflection* true)
 
 
-;;=== shell functions ===
+;; # Shell utilities
+;; These utilities help us interact with external commands run from
+;; the shell. These utility functions should be split out into a
+;; separate namespace.
 
+;; These two dynamic bindings are used for `box` functionallity and
+;; should be removed when `box` is removed / replaced.
 (def ^:dynamic *box-cmds* (atom []))
 (def ^:dynamic ^File *pwd* nil)
 
+;; The `clojure.java.shell/sh` function is not convenient for our use.
+;; We want to be able to pass in paths as both strings and as `File`
+;; objects as we are perpetually dealing with both.
 (defn sh
   [& cmdline]
   ;; (prn :sh cmdline)
@@ -45,6 +53,10 @@
                           %)
                        cmdline)))
 
+;; In many cases the `clojure.java.shell/sh` model doesn't work for us
+;; at all since it requires that stdout/stderr be fully realized and
+;; captured before returning. We create `subprocess` to get the
+;; behavior that we want.
 (defn subprocess
   [{:keys [dir]} & cmdline]
   (let [proc (doto (ProcessBuilder. ^java.util.List cmdline)
@@ -52,19 +64,32 @@
                (.inheritIO))]
     (.waitFor (.start proc))))
 
+;; One of many reasons I don't like how box works is that it requires
+;; that we swap global atoms to apply box commands.
 (defn box-cmd
   [& cmd]
   (swap! *box-cmds* conj (apply str cmd)))
 
+;; Our `git` helper function is our workhorse for all git activities.
+
 (defn git
+  "`git` generally takes a series of arguments that would be passed to
+git. The first argument, a required map, allows the caller to
+specify the following:
+
+ * `:gitdir` - a directory to run the git command in.
+ * `:ok-statuses` - a set of exit statuses that will not cause the
+       git command to throw an exception. This defaults to `#{0}`.
+ * `:sh-opts` - options which can be passed on to the `sh` function."
   [{:keys [^File gitdir ok-statuses sh-opts]
-    :or {ok-statuses #{0}}} & subcmd]
+    :or {ok-statuses #{0}}}
+   & subcmd]
   ;; We won't handle bare repos or displaced worktrees
   (let [cmd-args (if (nil? gitdir)
                    []
                    [:dir gitdir])
         all-args (concat subcmd cmd-args sh-opts)
-        ;; _ (prn :calling (doall (cons 'git all-args)))
+        #_ (prn :calling (doall (cons 'git all-args)))
         {:keys [exit] :as rtn} (apply sh "git" all-args)
         rtn (assoc rtn
               :git all-args
@@ -1227,17 +1252,17 @@ This is provided for lein-voom developer debug usage."
             succs)))
 
 (defn newest-voom-ver-by-spec
-"
-  proj dir change -> commit where a change happened in a subtree rooted with a project.clj
-  - mark all project directory changes with project.clj version info
-  - a. narrow proj dir changes by proj name spec
-  - b. narrow all proj dir changes by *this* proj dir
-  - c. for each branch (matching spec) narrow proj dir changes by branch reachability
-  - d. narrow proj dir changes further by version range (spec)
-  - e. find max sem ver
-  - f. narrow proj dir changes further by max sem ver
-  - g. narrow proj dir changes to candidates by finding proj dir changes
-       with no childer proj dir changes in this set
+"proj dir change -> commit where a change happened in a subtree rooted with a project.clj
+
+ - mark all project directory changes with project.clj version info
+ - *a.* narrow proj dir changes by proj name spec
+ - *b.* narrow all proj dir changes by *this* proj dir
+ - *c.* for each branch (matching spec) narrow proj dir changes by branch reachability
+ - *d.* narrow proj dir changes further by version range (spec)
+ - *e.* find max sem ver
+ - *f.* narrow proj dir changes further by max sem ver
+ - *g.* narrow proj dir changes to candidates by finding proj dir changes
+        with no childer proj dir changes in this set
 "
   [repo-dbs name-spec {:keys [sha version-mvn repo branch path allow-snaps]
                        :or {allow-snaps true, sha (l/lvar)}}]
