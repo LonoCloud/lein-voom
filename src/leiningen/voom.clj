@@ -205,7 +205,7 @@ specify the following:
 (defn https-url-for [[user pass :as creds] ^String repo-path]
   (str "https://" user ":" pass "@github.com/" repo-path))
 
-(defn repo->path [repo]
+(defn repo->path [^String repo]
   (->> repo .getBytes ^bytes b64/encode String.))
 
 (defn ensure-repo
