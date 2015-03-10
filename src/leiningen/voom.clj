@@ -1165,7 +1165,7 @@ This is provided for lein-voom developer debug usage."
           (vary-meta assoc ::dirty true)))
       (build-shabam (vals new-branches)))))
 
-(def voomdb-header "voom-db-9")
+(def voomdb-header "voom-db-10")
 
 (defn ^File git-db-file
   [gitdir]
