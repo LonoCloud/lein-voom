@@ -465,7 +465,7 @@ specify the following:
 (defn patch-fn
   [f default-val]
   (fn [filename & args]
-    (if (re-find #"\.lein|project[^/]*\.clj$" filename)
+    (if (re-find #"\.lein|project[^/]*\.clj$" (str filename))
       (apply f filename args)
       default-val)))
 
