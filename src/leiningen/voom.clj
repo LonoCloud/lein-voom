@@ -100,7 +100,7 @@ specify the following:
                        (re-seq #"(?m)^.*$" (:out rtn))))]
     (if (ok-statuses exit)
       rtn
-      (throw (ex-info "git error" rtn)))))
+      (throw (ex-info (str "git error: " (pr-str rtn)) rtn)))))
 
 ;; === git sha-based versions ===
 
