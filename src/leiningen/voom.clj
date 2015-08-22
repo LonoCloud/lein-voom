@@ -1009,11 +1009,14 @@ This is provided for lein-voom developer debug usage."
        (partition-by #{"--"})
        (remove #{'("--")})
        file-path-merges
-       (map #(-> (git {:gitdir gitdir}
-                      "rev-parse" (str sha ":" %))
-                 :out
-                 s/trim
-                 (->> (vector %))))
+       (map #(let [ret (git {:gitdir gitdir :ok-statuses #{0 128}}
+                            "rev-parse" (str sha ":" %))]
+               (if (:bool ret)
+                 (-> (:out ret)
+                     s/trim
+                     (->> (vector %)))
+                 [])))
+       (remove empty?)
        (into {})))
 
 (defn exported-commits
