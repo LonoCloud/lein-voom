@@ -10,9 +10,9 @@ lein-voom is a Leiningen plugin that helps you clean up your dependency tree.
 
 Use this for user-level plugins:
 
-Put `[lein-voom "0.1.0-20150911_144738-g37ed017"]` into the `:plugins` vector of your
+Put `[lein-voom "0.1.0-20150918_173909-g0450073"]` into the `:plugins` vector of your
 `:user` profile, or if you are on Leiningen 1.x do `lein plugin install
-voom 0.1.0-20150911_144738-g37ed017`.
+voom 0.1.0-20150918_173909-g0450073`.
 
 Annotate your voom dependencies in your ```project.clj```. For example:
 ```clojure
