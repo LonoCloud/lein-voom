@@ -1152,7 +1152,7 @@ This is provided for lein-voom developer debug usage."
       (->/when (not= old-branches new-branches)
         (->/let [repo (-> (remotes gitdir) :origin :fetch)]
 
-          ;; Update branchs
+          ;; Update branches
           (->/for [[name sha] old-branches]
             (update-in [:pldb] pldb/db-retraction r-branch repo name sha))
           (->/for [[name sha] new-branches]

@@ -27,6 +27,15 @@
   [db]
   (for [[rel-name indexes] db
         :when (seq (::pldb/unindexed indexes))]
+    ;; Build a tuple of [rel-name tuple-list].
+    ;; The only reason for this 'if' is to order the tuple-list in a
+    ;; way that is likely to improve compression. We choose the
+    ;; lowest-numbered index so that the repeated values come early in
+    ;; tuple. This produces a reported 40% decrease in compressed
+    ;; fressian data. The reason for preferring this index should not
+    ;; have been forgotten, but was lost. History became
+    ;; legend. Legend became myth. A few sprints later, the original
+    ;; understanding passed out of all knowledge.
     (if-let [min-index (and (< 1 (count indexes))
                             (apply min (filter number? (keys indexes))))]
       [rel-name (mapcat seq (vals (get indexes min-index)))]
@@ -34,7 +43,7 @@
 
 (defn from-reldata
   "Returns a core.logic pldb for the given reldata (such as generated
-  by 'to-reldata'. Also requires a colection of rels that includes every
+  by 'to-reldata'. Also requires a collection of rels that includes every
   rel in the reldata. This is because reldata doesn't specify what is
   indexed, so the live rels are used for that."
   [rels reldata]
