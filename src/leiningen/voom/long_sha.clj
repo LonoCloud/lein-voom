@@ -4,10 +4,10 @@
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* true)
 
-(defn ^:private ^long nibbles [^long num]
+(defn ^:private nibbles ^long [^long num]
   (-> num (bit-shift-right 60) (bit-and 0xf)))
 
-(defn ^long mask [^long num]
+(defn mask ^long [^long num]
   (bit-shift-right
    0xfffffffffffffff
    (* 4 (- 15 (nibbles num)))))
