@@ -67,7 +67,7 @@
   (let [proc (doto (ProcessBuilder. ^java.util.List cmdline)
                (.directory (File. ^String dir))
                (.inheritIO))]
-    (.waitFor (.start proc))))
+    {:exit (.waitFor (.start proc))}))
 
 ;; One of many reasons I don't like how box works is that it requires
 ;; that we swap global atoms to apply box commands.
