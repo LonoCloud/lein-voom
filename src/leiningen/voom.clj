@@ -123,7 +123,7 @@ specify the following:
   (let [shafmt (if long-sha? "%H" "%h")
         fmt (str "--pretty=" shafmt ",%cd")
         path (get {"" "."} path path)
-        {:keys [out]} (git {:gitdir gitdir} "log" "-1" fmt path)
+        {:keys [out]} (git {:gitdir gitdir} "log" "--abbrev=7" "-1" fmt path)
         _ (assert (seq out) "No committed changes?")
         [sha, datestr] (-> out s/trim (s/split #"," 2))
         ctime (Date. ^String datestr)]
@@ -856,7 +856,9 @@ specify the following:
   (if (or (not expected-version) (= found-version expected-version))
     found-version
     (do
-      (assert (= (:sha expected-version) (:sha found-version)))
+      (assert (= (:sha expected-version) (:sha found-version))
+              (str "Expected version: " (:sha expected-version)
+                   "  Found version: " (:sha found-version)))
       (let [^Date found-date (:ctime found-version)
             ^Calendar found-cal (Calendar/getInstance
                                  (SimpleTimeZone. 0 "GMT")
