@@ -12,6 +12,10 @@ git config --global user.email "none@yo.biz"
 mkdir /test
 cd test
 
+################################################################################
+# Create dependency project
+################################################################################
+
 mkdir dep1
 cd dep1
 
@@ -35,6 +39,10 @@ read dep1 dep1_ver <<<"$ver"
 echo "Installed: ${dep1} ${dep1_ver}"
 
 cd -
+
+################################################################################
+# Create project depending on dep1
+################################################################################
 
 mkdir proj
 cd proj
@@ -62,9 +70,17 @@ echo "Installed: ${proj} ${proj_ver}"
 
 cd -
 
+################################################################################
+# Create box referencing proj and dep1
+################################################################################
+
 box new mybox '{:repo "/test/proj"}' proj  '{:repo "/test/dep1"}' dep1
 
 cd mybox/proj--proj
+
+################################################################################
+# Run code in project to trigger lein checkouts classpath hook
+################################################################################
 
 lein repl <<<"(prn :test)"
 
