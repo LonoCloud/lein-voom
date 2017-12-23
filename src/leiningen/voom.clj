@@ -732,7 +732,7 @@ specify the following:
         (safe-delete-repo checkout pdir))
       (if (.exists ^File checkout)
         (git g "fetch" "--all")
-        (git {} "clone" repo "--refer" gitdir checkout))
+        (git {} "clone" repo "--reference" gitdir checkout))
       (safe-checkout checkout sha) ; must detach head for update...
       (git g "branch" "-f" branch sha)
       (git g "checkout" branch)
