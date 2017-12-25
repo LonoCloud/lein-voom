@@ -13,7 +13,7 @@ for ver in $LEIN_TEST_VERSIONS; do
     for test in $LEIN_TESTS; do
         docker run -i --rm \
                 --name lein-test \
-                -v $(readlink -f scripts/):/scripts \
+                -v $(readlink -f scripts/):/scripts:ro \
                 -w / \
                 lein-test:${ver} \
                 "${test}"
