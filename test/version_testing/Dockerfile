@@ -20,5 +20,9 @@ ENV VOOM_VER=$VOOM_VER
 RUN mkdir -p ~/.lein
 RUN echo '{:system {:plugins [[lein-voom "'${VOOM_VER}'"]]}}' > ~/.lein/profiles.clj
 
+# If available, pre-fetched or locally built lein-voom images will be copied in by test script.
+COPY artifacts /root/.m2/repository
+
+# Bootstrap lein install
 RUN lein version
 
