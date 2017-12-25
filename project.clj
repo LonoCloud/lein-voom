@@ -11,8 +11,7 @@
                  [org.clojure/data.codec "0.1.0"]
                  [org.clojure/data.fressian "0.2.0"]
                  [org.clojure/core.logic "0.8.10"]
-                 [org.clojure/test.check "0.6.1"]
-                 [org.sonatype.aether/aether-util "1.13.1"]]
+                 [org.clojure/test.check "0.6.1"]]
   :plugins [[lein-marginalia "0.8.0"]]
   :signing {:gpg-key "A4D5C342"}
   :repositories [["sonatype-snapshot" "http://oss.sonatype.org/content/repositories/snapshots"]]

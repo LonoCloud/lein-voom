@@ -24,12 +24,17 @@
            [java.lang.reflect Array]
            [java.io File FileInputStream FileOutputStream OutputStreamWriter
             Closeable]
-           [java.util.logging Logger Handler Level]
-           [org.sonatype.aether.util.version GenericVersionScheme]
-           [org.sonatype.aether.resolution ArtifactDescriptorException]
-           [org.sonatype.aether.transfer ArtifactNotFoundException]))
+           [java.util.logging Logger Handler Level]))
 
 (set! *warn-on-reflection* true)
+
+(if (lmain/version-satisfies? (lmain/leiningen-version) "2.8.0-RC1")
+  (import '[org.eclipse.aether.util.version GenericVersionScheme]
+          '[org.eclipse.aether.resolution ArtifactDescriptorException]
+          '[org.eclipse.aether.transfer ArtifactNotFoundException])
+  (import '[org.sonatype.aether.util.version GenericVersionScheme]
+          '[org.sonatype.aether.resolution ArtifactDescriptorException]
+          '[org.sonatype.aether.transfer ArtifactNotFoundException]))
 
 
 ;; # Shell utilities
