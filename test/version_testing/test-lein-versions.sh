@@ -17,5 +17,6 @@ for ver in $LEIN_TEST_VERSIONS; do
                 -w / \
                 lein-test:${ver} \
                 "${test}"
+        echo ">>> Test of lein-voom ${LEIN_VOOM_VERSION} against lein ${ver} ::SUCCESS::"
     done
 done
