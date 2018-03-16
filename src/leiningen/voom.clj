@@ -316,7 +316,12 @@ specify the following:
                          :pname pname
                          :candidate candidate})
   (for [p (find-project-files candidate)
-        :let [{:keys [group name] :as prj} (project/read p)]
+        :let [{:keys [group name] :as prj} (try
+                                             (project/read p)
+                                             (catch Exception e
+                                               (binding [*out* *err*]
+                                                 (println "WARNING: failed to read" (pr-str p) "looking for" (pr-str [pgroup pname])))
+                                               nil))]
         :when (and (= group pgroup)
                    (= name pname))]
     (do (debug "find-project" {:prj prj})
