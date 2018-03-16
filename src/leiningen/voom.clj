@@ -451,22 +451,6 @@ specify the following:
     (.containsVersion (.parseVersionConstraint gvs range-str)
                       (.parseVersion gvs version-str))))
 
-(defn read-project [gitdir sha prj-path]
-  (let [tmp-file (File/createTempFile ".project-" ".clj")
-        _ (spit tmp-file
-                (:out (git {:gitdir gitdir} "show" (str sha ":" prj-path))))
-        prj (try (assoc (project/read (str tmp-file))
-                   :root (or (.getParent (io/file prj-path)) ""))
-                 (catch Throwable t
-                   (throw (ex-info "Error reading project file"
-                                   {:project-file prj-path
-                                    :git-sha sha
-                                    :git-dir gitdir}
-                                   t))))]
-    (.delete tmp-file)
-    prj))
-
-
 (defn patch-fn
   [f default-val]
   (fn [filename & args]
