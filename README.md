@@ -39,6 +39,11 @@ After ```voom freshen```, our example dependency in ```project.clj``` has been u
 [ring/ring-core "1.3.0-RC1-20140519_142204-gaf0379b"]
 ```
 
+To get more verbose output, set DEBUG=1 in your environment. For example:
+```bash
+$ DEBUG=1 lein voom build-deps
+```
+
 ## The scenario:
 
 Multiple git projects with one or more leiningen projects in each, all
