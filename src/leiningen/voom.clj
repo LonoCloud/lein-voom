@@ -42,6 +42,12 @@
 ;; the shell. These utility functions should be split out into a
 ;; separate namespace.
 
+(def DEBUG? (seq (System/getenv "DEBUG")))
+
+(defn debug [msg data-map]
+  (when DEBUG?
+    (println "DEBUG:" msg (pr-str data-map))))
+
 ;; These two dynamic bindings are used for `box` functionallity and
 ;; should be removed when `box` is removed / replaced.
 (def ^:dynamic *box-cmds* (atom []))
@@ -216,6 +222,7 @@ specify the following:
 (defn ensure-repo
   "Makes sure the task-dir contains the specified repo, cloning it if not found."
   [^String repo]
+  (debug "ensure-repo" {:repo repo})
   (let [repo-dir (io/file voom-repos (repo->path repo))]
     (if (.exists repo-dir)
       (git {:gitdir repo-dir} "fetch")
@@ -305,11 +312,20 @@ specify the following:
 
 (defn find-project
   [pgroup pname candidate]
+  (debug "find-project" {:pgroup pgroup
+                         :pname pname
+                         :candidate candidate})
   (for [p (find-project-files candidate)
-        :let [{:keys [group name] :as prj} (project/read p)]
+        :let [{:keys [group name] :as prj} (try
+                                             (project/read p)
+                                             (catch Exception e
+                                               (binding [*out* *err*]
+                                                 (println "WARNING: failed to read" (pr-str p) "looking for" (pr-str [pgroup pname])))
+                                               nil))]
         :when (and (= group pgroup)
                    (= name pname))]
-    prj))
+    (do (debug "find-project" {:prj prj})
+        prj)))
 
 (defn safe-checkout [gitdir sha]
   (git {:gitdir gitdir} "clean" "-x" "-d" "--force" "--quiet")
@@ -320,6 +336,7 @@ specify the following:
   [repos-dir pspec]
   ;; TODO: find correct sha and project.clj more efficiently and with
   ;; less ambiguity. (only consider projects changed at the given sha)
+  (debug "find-matching-projects" {:repos-dir repos-dir, :pspec pspec})
   (let [{:keys [sha artifactId groupId]} pspec
         dirs (all-repos-dirs)
         sha-candidates (locate-sha dirs sha)
@@ -393,6 +410,7 @@ specify the following:
           dep-meta-repo (-> dep meta :voom :repo)
           _ (when dep-meta-repo (ensure-repo dep-meta-repo))
           prjs (find-matching-projects voom-repos (merge vmap art))]
+      (debug "resolve-artifact" {:prjs prjs})
       (when (empty? prjs)
         (throw (ex-info (str "No project found for " artifactId " " version
                              " (Hint: might need to clone a new repo into "
@@ -416,9 +434,11 @@ specify the following:
 (defn try-once-resolve-voom-version [project]
   (let [non-dev-proj (project/set-profiles project [] [:dev :user])]
     (try
-      (with-log-level Level/OFF
-        #(binding [*err* null-writer]
-           (leiningen.core.classpath/resolve-dependencies :dependencies non-dev-proj)))
+      (if DEBUG?
+        (leiningen.core.classpath/resolve-dependencies :dependencies non-dev-proj)
+        (with-log-level Level/OFF
+          #(binding [*err* null-writer]
+             (leiningen.core.classpath/resolve-dependencies :dependencies non-dev-proj))))
       :ok
       (catch Exception e
         ;; lein resolve-dependencies wraps a
@@ -451,22 +471,6 @@ specify the following:
     (.containsVersion (.parseVersionConstraint gvs range-str)
                       (.parseVersion gvs version-str))))
 
-(defn read-project [gitdir sha prj-path]
-  (let [tmp-file (File/createTempFile ".project-" ".clj")
-        _ (spit tmp-file
-                (:out (git {:gitdir gitdir} "show" (str sha ":" prj-path))))
-        prj (try (assoc (project/read (str tmp-file))
-                   :root (or (.getParent (io/file prj-path)) ""))
-                 (catch Throwable t
-                   (throw (ex-info "Error reading project file"
-                                   {:project-file prj-path
-                                    :git-sha sha
-                                    :git-dir gitdir}
-                                   t))))]
-    (.delete tmp-file)
-    prj))
-
-
 (defn patch-fn
   [f default-val]
   (fn [filename & args]
@@ -480,14 +484,17 @@ specify the following:
 (defn robust-read-proj-blob
   [gitdir blob-sha]
   ;; Hack to work around crazy project.clj files
+  (debug "robust-read-proj-blob" {:gitdir gitdir, :blob-sha blob-sha})
   (binding [slurp (patch-fn slurp "{}")
             load-file (patch-fn load-file {})]
     (let [tmp-file (File/createTempFile ".project-" ".clj")]
       (try
         (spit tmp-file
               (:out (git {:gitdir gitdir} "cat-file" "-p" (str blob-sha))))
-        (binding [*out* null-writer, *err* null-writer]
-          (project/read (str tmp-file)))
+        (if DEBUG?
+          (project/read (str tmp-file))
+          (binding [*out* null-writer, *err* null-writer]
+            (project/read (str tmp-file))))
         (catch Exception e
           ;; It was really just a best effort anyway. Silently ignore.
           nil)
