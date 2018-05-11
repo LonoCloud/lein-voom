@@ -303,10 +303,16 @@ specify the following:
                                (:err data)))
                  (throw e)))))))))
 
+(defn safe-project-read [p]
+  (try (project/read p)
+       (catch Exception e
+         (println "Found and skipped bad project at: " p)
+         nil)))
+
 (defn find-project
   [pgroup pname candidate]
   (for [p (find-project-files candidate)
-        :let [{:keys [group name] :as prj} (project/read p)]
+        :let [{:keys [group name] :as prj} (safe-project-read p)]
         :when (and (= group pgroup)
                    (= name pname))]
     prj))
