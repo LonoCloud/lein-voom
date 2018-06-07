@@ -445,8 +445,9 @@ specify the following:
       (when-not (= :ok (try-once-resolve-voom-version project))
         (recur)))
     (catch clojure.lang.ExceptionInfo e
-      (println "Failed to resolve dependency:" (.getMessage e))
-      (pprint {:exception-data (ex-data e)}))))
+     (lmain/abort (with-out-str
+                   (println "Failed to resolve dependency:" (.getMessage e))
+                   (pprint {:exception-data (ex-data e)}))))))
 
 
 ;; === freshen ===
