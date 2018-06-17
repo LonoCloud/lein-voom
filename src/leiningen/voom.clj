@@ -304,10 +304,11 @@ specify the following:
                  (throw e)))))))))
 
 (defn safe-project-read [p]
-  (try (project/read p)
-       (catch Exception e
-         (println "Found and skipped bad project at: " p)
-         nil)))
+  (binding [lmain/*exit-process?* false]
+    (try (project/read p)
+         (catch Throwable t
+           (println "Found and skipped bad project at: " p)
+           nil))))
 
 (defn find-project
   [pgroup pname candidate]
