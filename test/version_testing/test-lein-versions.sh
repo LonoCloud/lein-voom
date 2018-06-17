@@ -11,12 +11,15 @@ for ver in $LEIN_TEST_VERSIONS; do
     cp -a ~/.m2/repository/lein-voom/lein-voom/. artifacts/lein-voom/lein-voom/. || true
     docker build -t lein-test:${ver} --build-arg LEIN_VER=${ver} --build-arg VOOM_VER=${LEIN_VOOM_VERSION} .
     for test in $LEIN_TESTS; do
-        docker run -i --rm \
-                --name lein-test \
-                -v $(readlink -f scripts/):/scripts:ro \
-                -w / \
-                lein-test:${ver} \
-                "${test}"
-        echo ">>> Test '${test}' of lein-voom ${LEIN_VOOM_VERSION} against lein ${ver} ::SUCCESS::"
+        if docker run -i --rm \
+                  --name lein-test \
+                  -v $(readlink -f scripts/):/scripts:ro \
+                  -w / \
+                  lein-test:${ver} \
+                  "${test}"; then
+           echo ">>> Test '${test}' of lein-voom ${LEIN_VOOM_VERSION} against lein ${ver} ::SUCCESS::"
+        else
+           echo ">>> Test '${test}' of lein-voom ${LEIN_VOOM_VERSION} against lein ${ver} ::FAILURE::"
+        fi
     done
 done
