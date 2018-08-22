@@ -440,7 +440,7 @@ specify the following:
   "Like 'lein deps', but also builds voom-versioned things as needed."
   [project & args]
   (println "-- build-deps for" (:name project))
-  (ensure-deps-repos (:dependencies project))
+  (ensure-deps-repos (concat (:dependencies project) (:managed-dependencies project)))
   (try
     (loop []
       (when-not (= :ok (try-once-resolve-voom-version project))
