@@ -69,6 +69,13 @@
                (.inheritIO))]
     {:exit (.waitFor (.start proc))}))
 
+;; Helper function to determin if we're running under Windows or not
+;; See: https://github.com/RyanMcG/lein-npm/blob/master/src/leiningen/npm/process.clj
+(defn iswin
+  []
+  (let [os (System/getProperty "os.name")]
+    (-> os .toLowerCase (.contains "windows"))))
+
 ;; One of many reasons I don't like how box works is that it requires
 ;; that we swap global atoms to apply box commands.
 (defn box-cmd
@@ -340,25 +347,26 @@ specify the following:
 
 (defn install-versioned-artifact
   [version proot]
-  (println "Calling recursive build-deps on:" proot)
-  (safe-checkout proot (-> version ver-parse :sha))
-  (subprocess {:dir proot} "lein" "voom" "build-deps")
-  ;; Before getting here 'find-matching-projects had already called
-  ;; 'safe-checkout but "build-deps" dependencies may have modified
-  ;; the working-copy along the way so we make sure we're again at the
-  ;; right version before installing.
-  (safe-checkout proot (-> version ver-parse :sha))
-  ;; NOTE: Allowing dirty working copy here is ONLY OK because the
-  ;; working copy in question was just checked out and cleaned using
-  ;; 'safe-checkout above.
-  (let [install-cmd ["lein" "voom" "wrap" ":insanely-allow-dirty-working-copy"
-                     (str ":expected-version--" version)
-                     "install"]
-        _ (apply println "install-versioned-artifact:" install-cmd {:dir proot})
-        rtn {:exit (apply subprocess {:dir proot} install-cmd)}]
-    (when-not (zero? (:exit rtn))
-      (throw (ex-info "lein voom install error" (assoc rtn :cmd install-cmd))))
-    rtn))
+  (let [lein-cmd (if (iswin) "lein.bat" "lein")]
+      (println "Calling recursive build-deps on:" proot)
+    (safe-checkout proot (-> version ver-parse :sha))
+    (subprocess {:dir proot} lein-cmd "voom" "build-deps")
+    ;; Before getting here 'find-matching-projects had already called
+    ;; 'safe-checkout but "build-deps" dependencies may have modified
+    ;; the working-copy along the way so we make sure we're again at the
+    ;; right version before installing.
+    (safe-checkout proot (-> version ver-parse :sha))
+    ;; NOTE: Allowing dirty working copy here is ONLY OK because the
+    ;; working copy in question was just checked out and cleaned using
+    ;; 'safe-checkout above.
+    (let [install-cmd [lein-cmd "voom" "wrap" ":insanely-allow-dirty-working-copy"
+                       (str ":expected-version--" version)
+                       "install"]
+          _ (apply println "install-versioned-artifact:" install-cmd {:dir proot})
+          rtn {:exit (apply subprocess {:dir proot} install-cmd)}]
+      (when-not (zero? (:exit rtn))
+        (throw (ex-info "lein voom install error" (assoc rtn :cmd install-cmd))))
+      rtn)))
 
 (defn missing-artifacts-from-exception
   "Returns a sequence of artifacts indicated as missing anywhere in
@@ -704,7 +712,7 @@ specify the following:
   (loop [^File path (or *pwd* (-> "user.dir" System/getProperty File.))]
     (let [^String ppath (.getCanonicalPath path)
           ^File pfile (adj-dir ppath task-dir)]
-      (when-not (= "/" ppath)
+      (when-not (nil? (.getParentFile path))
         (if (.exists pfile)
           path
           (recur (.getParentFile path)))))))
@@ -713,7 +721,7 @@ specify the following:
   []
   (when-let [box (find-box)]
     (->> (.listFiles box)
-         (filter #(.contains (.getCanonicalPath ^File %) (str "/" task-dir "/")))
+         (filter #(.contains (.getCanonicalPath ^File %) (str File/pathSeparator task-dir File/pathSeparator)))
          (map (memfn ^File getName)))))
 
 (defn safe-delete-repo
