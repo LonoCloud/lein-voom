@@ -355,7 +355,7 @@ specify the following:
                      (str ":expected-version--" version)
                      "install"]
         _ (apply println "install-versioned-artifact:" install-cmd {:dir proot})
-        rtn {:exit (apply subprocess {:dir proot} install-cmd)}]
+        rtn (apply subprocess {:dir proot} install-cmd)]
     (when-not (zero? (:exit rtn))
       (throw (ex-info "lein voom install error" (assoc rtn :cmd install-cmd))))
     rtn))
