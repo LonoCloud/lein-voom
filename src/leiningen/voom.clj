@@ -635,7 +635,15 @@ specify the following:
 
   Example: lein voom freshen"
   [project & args]
-  (ensure-deps-repos (:dependencies project))
+  (try
+    (ensure-deps-repos (:dependencies project))
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)]
+        (if (:git data)
+          (println (str (.getMessage e) "\n"
+                        (pr-str (select-keys data [:git :exit])) "\n"
+                        (:err data)))
+                           (throw e)))))
   (when (not-any? #{"--no-fetch"} args)
     (fetch-all))
   (let [prj-file-name (str (:root project) "/project.clj")
